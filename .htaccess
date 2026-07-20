@@ -1,0 +1,19 @@
+RewriteEngine On
+
+ErrorDocument 404 /index.php?page=404
+
+# SEO endpoints
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+RewriteRule ^robots\.txt$ robots.php [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^product/([a-z0-9\-]+)/?$ index.php?page=product&slug=$1 [L,QSA]
+RewriteRule ^blog/([a-z0-9\-]+)/?$ index.php?page=blog-post&slug=$1 [L,QSA]
+RewriteRule ^blog/?$ index.php?page=blog [L,QSA]
+RewriteRule ^shop/?$ index.php?page=shop [L,QSA]
+RewriteRule ^about/?$ index.php?page=about [L,QSA]
+RewriteRule ^faq/?$ index.php?page=faq [L,QSA]
+RewriteRule ^contact/?$ index.php?page=contact [L,QSA]
+RewriteRule ^cart/?$ index.php?page=cart [L,QSA]
+RewriteRule ^checkout/?$ index.php?page=checkout [L,QSA]
