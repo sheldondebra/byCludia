@@ -45,6 +45,13 @@ if (!empty($product['category_id'])) {
     $related = $relStmt->fetchAll();
 }
 
+$isWishlisted = false;
+if ($productUser = current_user()) {
+    $wlCheck = db()->prepare('SELECT 1 FROM wishlists WHERE user_id = ? AND product_id = ?');
+    $wlCheck->execute([(int) $productUser['id'], (int) $product['id']]);
+    $isWishlisted = (bool) $wlCheck->fetchColumn();
+}
+
 $gallery = [];
 if (!empty($product['gallery'])) {
     $decoded = json_decode((string) $product['gallery'], true);
@@ -78,7 +85,13 @@ $pageDescription = $product['short_description'] ?? $product['name'];
 
 // --- SEO ---
 $canonical = url('product/' . $product['slug']);
+$seoTitle = trim((string) ($product['seo_title'] ?? ''));
+$seoDesc = trim((string) ($product['seo_description'] ?? ''));
+$pageTitle = seo_format_title($seoTitle !== '' ? $seoTitle : (string) $product['name']);
+$pageDescription = $seoDesc !== '' ? $seoDesc : (string) ($product['short_description'] ?? $product['name']);
 $ogType = 'product';
+$productAlt = seo_product_alt($product);
+$ogImageAlt = $productAlt;
 if ($mainImage) {
     $ogImage = $mainImage;
 }
@@ -87,41 +100,22 @@ $inStock = false;
 foreach ($variants as $v) {
     if ((int) $v['stock'] > 0) { $inStock = true; break; }
 }
-$productLd = [
-    '@type' => 'Product',
-    'name' => $product['name'],
-    'description' => strip_tags((string) ($product['short_description'] ?? $product['description'] ?? $product['name'])),
-    'sku' => (string) ($defaultVariant['sku'] ?? ('CD-' . $product['id'])),
-    'image' => array_map(fn ($img) => asset($img), $thumbs ?: [$logoPath ?? 'assets/images/logo.png']),
-    'brand' => ['@type' => 'Brand', 'name' => setting('store_name', 'By Claudia Darlene')],
-    'offers' => [
-        '@type' => 'Offer',
-        'url' => $canonical,
-        'priceCurrency' => 'GBP',
-        'price' => number_format((float) $lowestPrice, 2, '.', ''),
-        'availability' => $inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
-    ],
+$productFaqs = seo_parse_faq(isset($product['faq_json']) ? (string) $product['faq_json'] : null);
+$productLd = seo_product_jsonld($product, $canonical, (float) $lowestPrice, $inStock, $thumbs ?: ($mainImage ? [$mainImage] : []));
+$graph = [
+    $productLd,
+    seo_breadcrumbs([
+        ['name' => 'Home', 'url' => url()],
+        ['name' => 'Shop', 'url' => url('shop')],
+        ['name' => (string) $product['name'], 'url' => $canonical],
+    ]),
 ];
-if ((int) ($product['review_count'] ?? 0) > 0) {
-    $productLd['aggregateRating'] = [
-        '@type' => 'AggregateRating',
-        'ratingValue' => (string) $product['rating'],
-        'reviewCount' => (string) $product['review_count'],
-    ];
+if ($faqLd = seo_faq_jsonld($productFaqs)) {
+    $graph[] = $faqLd;
 }
 $jsonLd = [
     '@context' => 'https://schema.org',
-    '@graph' => [
-        $productLd,
-        [
-            '@type' => 'BreadcrumbList',
-            'itemListElement' => [
-                ['@type' => 'ListItem', 'position' => 1, 'name' => 'Home', 'item' => url()],
-                ['@type' => 'ListItem', 'position' => 2, 'name' => 'Shop', 'item' => url('shop')],
-                ['@type' => 'ListItem', 'position' => 3, 'name' => $product['name'], 'item' => $canonical],
-            ],
-        ],
-    ],
+    '@graph' => $graph,
 ];
 
 require ROOT_PATH . '/includes/header.php';
@@ -133,7 +127,7 @@ require ROOT_PATH . '/includes/header.php';
       <?php if ($mainImage): ?>
         <div class="relative group" data-gallery>
           <div id="product-zoom" class="aspect-[4/5] rounded-[28px] overflow-hidden bg-white shadow-soft cursor-zoom-in">
-            <img id="product-main-image" src="<?= e(asset($mainImage)) ?>" alt="<?= e($product['name']) ?>" class="w-full h-full object-cover transition-transform duration-150 ease-out will-change-transform">
+            <img id="product-main-image" src="<?= e(asset($mainImage)) ?>" alt="<?= e($productAlt) ?>" class="w-full h-full object-cover transition-transform duration-150 ease-out will-change-transform">
             <?php if ($hasProductVideo && $productVideoType === 'file'): ?>
               <video id="product-main-video" class="hidden absolute inset-0 w-full h-full object-cover bg-black" controls playsinline preload="metadata" poster="<?= e(asset($mainImage)) ?>">
                 <source src="<?= e($productVideo) ?>" type="video/mp4">
@@ -201,9 +195,47 @@ require ROOT_PATH . '/includes/header.php';
         <div><?= stars((float) $product['rating']) ?></div>
         <span class="text-sm text-brand-soft">(<?= (int) $product['review_count'] ?> reviews)</span>
       </div>
-      <p id="display-price" class="text-2xl font-medium mb-6" data-base="<?= e((string) ($defaultVariant['price'] ?? $product['base_price'])) ?>">
-        <?= money((float) ($defaultVariant['price'] ?? $product['base_price'])) ?>
-      </p>
+      <div class="mb-5">
+        <p id="display-price" class="text-2xl font-medium" data-base="<?= e((string) ($defaultVariant['price'] ?? $product['base_price'])) ?>">
+          <?= money((float) ($defaultVariant['price'] ?? $product['base_price'])) ?>
+        </p>
+        <p id="price-qty-note" class="text-sm text-brand-soft mt-1 hidden" aria-live="polite"></p>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mb-6">
+        <button type="button"
+          data-wishlist-toggle="<?= (int) $product['id'] ?>"
+          aria-pressed="<?= $isWishlisted ? 'true' : 'false' ?>"
+          aria-label="Add to wishlist"
+          title="Add to wishlist"
+          class="inline-flex items-center gap-2 rounded-full border border-brand-ink/15 bg-white px-4 py-2.5 text-sm hover:bg-brand-mist/60 transition <?= $isWishlisted ? 'text-rose-500 border-rose-200' : 'text-brand-ink' ?>">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="<?= $isWishlisted ? 'currentColor' : 'none' ?>" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 21C12 21 4 13.9 4 8.8 4 6.1 6.1 4 8.8 4c1.6 0 3.1.8 3.2 2 .1-1.2 1.6-2 3.2-2C17.9 4 20 6.1 20 8.8c0 5.1-8 12.2-8 12.2z"/></svg>
+          <span data-wishlist-label><?= $isWishlisted ? 'Wishlisted' : 'Wishlist' ?></span>
+        </button>
+        <button type="button"
+          data-compare-toggle="<?= (int) $product['id'] ?>"
+          aria-label="Add to compare"
+          title="Add to compare"
+          class="inline-flex items-center gap-2 rounded-full border border-brand-ink/15 bg-white/90 px-4 py-2.5 text-sm text-brand-ink hover:bg-brand-mist/60 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h2m6-16h2a2 2 0 012 2v12a2 2 0 01-2 2h-2m-3-18v20"/></svg>
+          <span data-compare-label>Compare</span>
+        </button>
+        <a href="<?= e(url('index.php?page=compare')) ?>" class="inline-flex items-center gap-1.5 rounded-full px-3 py-2.5 text-xs tracking-[0.12em] uppercase text-brand-soft hover:text-brand-ink transition">
+          View compare
+        </a>
+      </div>
+      <?php
+      $waNumber = whatsapp_number();
+      $waDefaultVariant = (string) ($defaultVariant['label'] ?? '');
+      $waDefaultPrice = money((float) ($defaultVariant['price'] ?? $product['base_price']));
+      $waHref = $waNumber !== '' ? whatsapp_order_url([
+          'name' => $product['name'],
+          'variant' => $waDefaultVariant,
+          'quantity' => 1,
+          'price' => $waDefaultPrice,
+          'url' => $canonical,
+      ]) : '';
+      ?>
 
       <?php if ($variants): ?>
         <form data-add-to-cart method="post" class="space-y-6">
@@ -214,7 +246,7 @@ require ROOT_PATH . '/includes/header.php';
             <div class="flex flex-wrap gap-2">
               <?php foreach ($variants as $i => $v): ?>
                 <label class="cursor-pointer">
-                  <input type="radio" name="variant_id" value="<?= (int) $v['id'] ?>" data-price="<?= e((string) $v['price']) ?>" class="peer sr-only" <?= $i === 0 ? 'checked' : '' ?> required>
+                  <input type="radio" name="variant_id" value="<?= (int) $v['id'] ?>" data-price="<?= e((string) $v['price']) ?>" data-label="<?= e((string) $v['label']) ?>" class="peer sr-only" <?= $i === 0 ? 'checked' : '' ?> required>
                   <span class="inline-block px-4 py-2 rounded-full border border-brand-ink/15 text-sm peer-checked:bg-brand-ink peer-checked:text-white peer-checked:border-brand-ink transition"><?= e($v['label']) ?></span>
                 </label>
               <?php endforeach; ?>
@@ -224,8 +256,45 @@ require ROOT_PATH . '/includes/header.php';
             <label for="qty" class="block text-xs tracking-[0.18em] uppercase text-brand-soft mb-3">Quantity</label>
             <input id="qty" type="number" name="quantity" min="1" value="1" class="w-24 rounded-full border border-brand-ink/15 bg-white px-4 py-2.5 text-sm">
           </div>
-          <button type="submit" class="btn-ink px-10 py-3.5 text-sm tracking-[0.12em] uppercase w-full sm:w-auto">Add to Cart</button>
+          <div class="flex flex-col sm:flex-row flex-wrap gap-3">
+            <button type="submit" class="btn-ink inline-flex items-center justify-center gap-2 px-10 py-3.5 text-sm tracking-[0.12em] uppercase w-full sm:w-auto">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1.4 9.2A2 2 0 0115.62 20H8.38a2 2 0 01-1.98-1.8L5 9z"/></svg>
+              Add to Cart
+            </button>
+            <button type="button" data-product-buy-now class="btn-blush inline-flex items-center justify-center gap-2 px-10 py-3.5 text-sm tracking-[0.12em] uppercase w-full sm:w-auto">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+              Buy Now
+            </button>
+            <?php if ($waHref !== ''): ?>
+              <a
+                href="<?= e($waHref) ?>"
+                target="_blank"
+                rel="noopener"
+                data-whatsapp-order
+                data-wa-number="<?= e($waNumber) ?>"
+                data-product-name="<?= e($product['name']) ?>"
+                data-product-url="<?= e($canonical) ?>"
+                data-store-name="<?= e((string) (setting('store_name', 'By Claudia Darlene') ?: 'By Claudia Darlene')) ?>"
+                class="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] text-white px-8 py-3.5 text-sm tracking-[0.12em] uppercase font-medium hover:bg-[#1ebe57] transition w-full sm:w-auto"
+              >
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm5.8 14.13c-.24.68-1.42 1.31-1.95 1.36-.5.05-1.13.24-3.72-.78-3.13-1.24-5.13-4.42-5.29-4.63-.15-.2-1.26-1.68-1.26-3.2 0-1.53.8-2.28 1.08-2.59.28-.31.61-.38.81-.38.2 0 .41 0 .58.01.19.01.44-.07.68.52.24.6.83 2.06.9 2.21.07.15.12.32.02.52-.1.2-.15.32-.3.5-.15.17-.31.39-.44.52-.15.15-.3.31-.13.6.17.29.76 1.25 1.63 2.02 1.12.99 2.06 1.3 2.35 1.45.29.15.46.12.63-.07.17-.2.72-.84.91-1.13.19-.29.39-.24.65-.15.27.1 1.71.81 2 .96.29.15.49.22.56.34.07.12.07.68-.17 1.36z"/></svg>
+                Shop on WhatsApp
+              </a>
+            <?php endif; ?>
+          </div>
         </form>
+      <?php elseif ($waHref !== ''): ?>
+        <div class="mt-6">
+          <a
+            href="<?= e($waHref) ?>"
+            target="_blank"
+            rel="noopener"
+            class="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] text-white px-8 py-3.5 text-sm tracking-[0.12em] uppercase font-medium hover:bg-[#1ebe57] transition"
+          >
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.21h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm5.8 14.13c-.24.68-1.42 1.31-1.95 1.36-.5.05-1.13.24-3.72-.78-3.13-1.24-5.13-4.42-5.29-4.63-.15-.2-1.26-1.68-1.26-3.2 0-1.53.8-2.28 1.08-2.59.28-.31.61-.38.81-.38.2 0 .41 0 .58.01.19.01.44-.07.68.52.24.6.83 2.06.9 2.21.07.15.12.32.02.52-.1.2-.15.32-.3.5-.15.17-.31.39-.44.52-.15.15-.3.31-.13.6.17.29.76 1.25 1.63 2.02 1.12.99 2.06 1.3 2.35 1.45.29.15.46.12.63-.07.17-.2.72-.84.91-1.13.19-.29.39-.24.65-.15.27.1 1.71.81 2 .96.29.15.49.22.56.34.07.12.07.68-.17 1.36z"/></svg>
+            Shop on WhatsApp
+          </a>
+        </div>
       <?php endif; ?>
 
       <div class="mt-8 pt-6 border-t border-brand-ink/10">
@@ -274,6 +343,25 @@ require ROOT_PATH . '/includes/header.php';
       <div class="border-t border-brand-ink/10 pt-10">
         <h2 class="font-display text-3xl sm:text-4xl mb-5">Description</h2>
         <div class="text-brand-soft leading-relaxed text-[17px] max-w-4xl whitespace-pre-line"><?= e($product['description'] ?? $product['short_description']) ?></div>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($productFaqs): ?>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
+      <div class="border-t border-brand-ink/10 pt-10 max-w-3xl">
+        <h2 class="font-display text-3xl sm:text-4xl mb-6">Questions &amp; answers</h2>
+        <div class="space-y-3">
+          <?php foreach ($productFaqs as $i => $faq): ?>
+            <details class="group rounded-2xl border border-brand-ink/10 bg-white/70 px-5 py-4" <?= $i === 0 ? 'open' : '' ?>>
+              <summary class="cursor-pointer list-none flex items-center justify-between gap-3 font-medium text-brand-ink">
+                <span><?= e($faq['question']) ?></span>
+                <span class="text-brand-soft text-lg leading-none group-open:rotate-45 transition">+</span>
+              </summary>
+              <p class="mt-3 text-sm text-brand-soft leading-relaxed"><?= e($faq['answer']) ?></p>
+            </details>
+          <?php endforeach; ?>
+        </div>
       </div>
     </div>
   <?php endif; ?>
@@ -367,7 +455,10 @@ require ROOT_PATH . '/includes/header.php';
 })();
 (() => {
   const priceEl = document.getElementById('display-price');
+  const priceNote = document.getElementById('price-qty-note');
   const radios = document.querySelectorAll('input[name="variant_id"]');
+  const qtyInput = document.getElementById('qty');
+  const waBtn = document.querySelector('[data-whatsapp-order]');
   const symbolMap = <?= json_encode(array_column(currency_rates(), 'symbol', 'code')) ?>;
   const rateMap = <?= json_encode(array_map('floatval', array_column(currency_rates(), 'rate_from_gbp', 'code'))) ?>;
   const currency = <?= json_encode(current_currency()) ?>;
@@ -375,10 +466,75 @@ require ROOT_PATH . '/includes/header.php';
     const amount = (gbp * (rateMap[currency] || 1)).toFixed(2);
     return (symbolMap[currency] || currency + ' ') + Number(amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
-  radios.forEach((r) => r.addEventListener('change', () => {
-    if (priceEl) priceEl.textContent = format(parseFloat(r.dataset.price));
-  }));
 
+  const unitPriceGbp = () => {
+    const selected = document.querySelector('input[name="variant_id"]:checked');
+    if (selected) return parseFloat(selected.dataset.price || '0') || 0;
+    return parseFloat(priceEl?.dataset.base || '0') || 0;
+  };
+
+  const quantity = () => Math.max(1, parseInt(qtyInput?.value || '1', 10) || 1);
+
+  const syncPrice = () => {
+    if (!priceEl) return;
+    const unit = unitPriceGbp();
+    const qty = quantity();
+    const total = unit * qty;
+    priceEl.dataset.base = String(unit);
+    priceEl.textContent = format(total);
+    if (priceNote) {
+      if (qty > 1 && unit > 0) {
+        priceNote.textContent = format(unit) + ' × ' + qty;
+        priceNote.classList.remove('hidden');
+      } else {
+        priceNote.textContent = '';
+        priceNote.classList.add('hidden');
+      }
+    }
+  };
+
+  const syncWhatsApp = () => {
+    if (!waBtn) return;
+    const selected = document.querySelector('input[name="variant_id"]:checked');
+    const variant = selected ? (selected.dataset.label || '') : '';
+    const unit = unitPriceGbp();
+    const qty = quantity();
+    const name = waBtn.dataset.productName || 'Product';
+    const productUrl = waBtn.dataset.productUrl || window.location.href;
+    const store = waBtn.dataset.storeName || 'By Claudia Darlene';
+    const number = waBtn.dataset.waNumber || '';
+    if (!number) return;
+
+    const lines = [
+      'Hi ' + store + '! I would like to order:',
+      '',
+      '• Product: ' + name,
+    ];
+    if (variant) lines.push('• Option: ' + variant);
+    lines.push('• Quantity: ' + qty);
+    if (unit > 0) {
+      lines.push('• Unit price: ' + format(unit));
+      if (qty > 1) lines.push('• Total: ' + format(unit * qty));
+      else lines.push('• Price: ' + format(unit));
+    }
+    lines.push('', 'Link: ' + productUrl, '', 'Please confirm availability and how to pay. Thank you!');
+    waBtn.href = 'https://wa.me/' + number + '?text=' + encodeURIComponent(lines.join('\n'));
+  };
+
+  const syncAll = () => {
+    syncPrice();
+    syncWhatsApp();
+  };
+
+  radios.forEach((r) => r.addEventListener('change', syncAll));
+  if (qtyInput) {
+    qtyInput.addEventListener('input', syncAll);
+    qtyInput.addEventListener('change', () => {
+      if (parseInt(qtyInput.value || '1', 10) < 1) qtyInput.value = '1';
+      syncAll();
+    });
+  }
+  syncAll();
 })();
 
 // Product gallery slider + cursor zoom

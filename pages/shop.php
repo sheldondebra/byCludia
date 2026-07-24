@@ -13,6 +13,45 @@ $minPrice = ($minRaw !== '' && $minRaw !== null) ? (float) $minRaw : null;
 $maxPrice = ($maxRaw !== '' && $maxRaw !== null) ? (float) $maxRaw : null;
 
 $categories = db()->query('SELECT * FROM categories ORDER BY sort_order')->fetchAll();
+$activeCategory = null;
+if ($categorySlug !== '') {
+    foreach ($categories as $cat) {
+        if (($cat['slug'] ?? '') === $categorySlug) {
+            $activeCategory = $cat;
+            break;
+        }
+    }
+}
+
+$shopHeading = 'Our Collection';
+$shopIntro = 'Crafted for texture, volume, and effortless beauty.';
+if ($activeCategory) {
+    $shopHeading = (string) $activeCategory['name'];
+    $seoTitle = trim((string) ($activeCategory['seo_title'] ?? ''));
+    $seoDesc = trim((string) ($activeCategory['seo_description'] ?? ''));
+    $pageTitle = seo_format_title($seoTitle !== '' ? $seoTitle : (string) $activeCategory['name']);
+    $pageDescription = $seoDesc !== ''
+        ? $seoDesc
+        : trim((string) ($activeCategory['description'] ?? $pageDescription));
+    $canonical = url('shop?category=' . rawurlencode($categorySlug));
+    $introHtml = trim((string) ($activeCategory['intro_html'] ?? ''));
+    if ($introHtml !== '') {
+        $shopIntro = $introHtml;
+    } elseif (!empty($activeCategory['description'])) {
+        $shopIntro = (string) $activeCategory['description'];
+    }
+}
+
+$jsonLd = [
+    '@context' => 'https://schema.org',
+    '@graph' => [
+        seo_breadcrumbs(array_values(array_filter([
+            ['name' => 'Home', 'url' => url()],
+            ['name' => 'Shop', 'url' => url('shop')],
+            $activeCategory ? ['name' => (string) $activeCategory['name'], 'url' => $canonical] : null,
+        ]))),
+    ],
+];
 
 $sql = "SELECT p.* FROM products p LEFT JOIN categories c ON c.id = p.category_id
         WHERE p.is_active = 1
@@ -56,15 +95,19 @@ require ROOT_PATH . '/includes/header.php';
 <section class="py-14 sm:py-20">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center mb-10 reveal">
-      <h1 class="font-display text-5xl mb-3">Our Collection</h1>
-      <p class="text-brand-soft">Crafted for texture, volume, and effortless beauty.</p>
+      <h1 class="font-display text-5xl mb-3"><?= e($shopHeading) ?></h1>
+      <?php if ($activeCategory && trim((string) ($activeCategory['intro_html'] ?? '')) !== ''): ?>
+        <div class="text-brand-soft max-w-2xl mx-auto leading-relaxed"><?= nl2br(e(strip_tags((string) $activeCategory['intro_html']))) ?></div>
+      <?php else: ?>
+        <p class="text-brand-soft max-w-2xl mx-auto"><?= e(is_string($shopIntro) ? strip_tags($shopIntro) : 'Crafted for texture, volume, and effortless beauty.') ?></p>
+      <?php endif; ?>
     </div>
 
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
       <div class="flex flex-wrap gap-2">
-        <a href="<?= e(url('index.php?page=shop')) ?>" class="px-4 py-2 rounded-full text-xs tracking-[0.14em] uppercase <?= $categorySlug === '' ? 'bg-brand-ink text-white' : 'bg-white border border-brand-ink/10' ?>">All</a>
+        <a href="<?= e(url('shop')) ?>" class="px-4 py-2 rounded-full text-xs tracking-[0.14em] uppercase <?= $categorySlug === '' ? 'bg-brand-ink text-white' : 'bg-white border border-brand-ink/10' ?>">All</a>
         <?php foreach ($categories as $cat): ?>
-          <a href="<?= e(url('index.php?page=shop&category=' . urlencode($cat['slug']))) ?>" class="px-4 py-2 rounded-full text-xs tracking-[0.14em] uppercase <?= $categorySlug === $cat['slug'] ? 'bg-brand-ink text-white' : 'bg-white border border-brand-ink/10' ?>"><?= e($cat['name']) ?></a>
+          <a href="<?= e(url('shop?category=' . urlencode($cat['slug']))) ?>" class="px-4 py-2 rounded-full text-xs tracking-[0.14em] uppercase <?= $categorySlug === $cat['slug'] ? 'bg-brand-ink text-white' : 'bg-white border border-brand-ink/10' ?>"><?= e($cat['name']) ?></a>
         <?php endforeach; ?>
       </div>
       <div class="flex flex-wrap gap-2 items-center">

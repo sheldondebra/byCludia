@@ -7,10 +7,14 @@ declare(strict_types=1);
  *   $shareUrl   (string) absolute URL to share
  *   $shareTitle (string) title/text
  *   $shareImage (string) optional absolute image URL (for Pinterest)
+ *   $shareLabel (string) optional label before buttons (default "Share")
+ *   $shareNative (bool) show "More" native share button (default true)
  */
 $shareUrl = $shareUrl ?? current_url();
 $shareTitle = $shareTitle ?? setting('store_name', 'By Claudia Darlene');
 $shareImage = $shareImage ?? '';
+$shareLabel = $shareLabel ?? 'Share';
+$shareNative = $shareNative ?? true;
 
 $u = rawurlencode($shareUrl);
 $t = rawurlencode($shareTitle);
@@ -43,19 +47,34 @@ $links = [
         'svg' => '<path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm0 2v.01L12 13l8-6.99V6H4zm16 2.24l-7.38 6.45a1 1 0 01-1.24 0L4 8.24V18h16V8.24z"/>',
     ],
 ];
+
+$btnClass = 'w-9 h-9 rounded-full bg-white border border-brand-ink/10 text-brand-ink/70 hover:bg-brand-ink hover:text-white hover:border-brand-ink transition flex items-center justify-center';
 ?>
 <div class="flex flex-wrap items-center gap-2.5" data-share>
-  <span class="text-xs tracking-[0.18em] uppercase text-brand-soft mr-1">Share</span>
+  <?php if ($shareLabel !== ''): ?>
+    <span class="text-xs tracking-[0.18em] uppercase text-brand-soft mr-1"><?= e($shareLabel) ?></span>
+  <?php endif; ?>
   <?php foreach ($links as $key => $l): ?>
     <a href="<?= e($l['href']) ?>" target="_blank" rel="noopener nofollow"
        aria-label="Share on <?= e($l['label']) ?>" title="Share on <?= e($l['label']) ?>"
-       class="w-9 h-9 rounded-full bg-white border border-brand-ink/10 text-brand-ink/70 hover:bg-brand-ink hover:text-white hover:border-brand-ink transition flex items-center justify-center">
+       class="<?= e($btnClass) ?>">
       <svg class="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><?= $l['svg'] ?></svg>
     </a>
   <?php endforeach; ?>
+  <?php if ($shareNative): ?>
+    <button type="button"
+      data-native-share
+      data-share-url="<?= e($shareUrl) ?>"
+      data-share-title="<?= e($shareTitle) ?>"
+      aria-label="More ways to share" title="More"
+      class="<?= e($btnClass) ?> hidden"
+      data-native-share-btn>
+      <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+    </button>
+  <?php endif; ?>
   <button type="button" data-copy-link="<?= e($shareUrl) ?>"
     aria-label="Copy link" title="Copy link"
-    class="w-9 h-9 rounded-full bg-white border border-brand-ink/10 text-brand-ink/70 hover:bg-brand-ink hover:text-white hover:border-brand-ink transition flex items-center justify-center">
+    class="<?= e($btnClass) ?>">
     <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H16a4 4 0 010 8h-2.5M10.5 6H8a4 4 0 000 8h2.5M8 10h8"/></svg>
   </button>
   <span data-copy-feedback class="text-xs text-emerald-600 hidden">Link copied!</span>
@@ -64,21 +83,34 @@ $links = [
 <?php if (empty($GLOBALS['__share_js_loaded'])): $GLOBALS['__share_js_loaded'] = true; ?>
 <script>
 document.addEventListener('click', function (e) {
+  var nativeBtn = e.target.closest('[data-native-share]');
+  if (nativeBtn && navigator.share) {
+    e.preventDefault();
+    navigator.share({
+      title: nativeBtn.getAttribute('data-share-title') || document.title,
+      text: nativeBtn.getAttribute('data-share-title') || '',
+      url: nativeBtn.getAttribute('data-share-url') || window.location.href
+    }).catch(function () {});
+    return;
+  }
+
   var btn = e.target.closest('[data-copy-link]');
   if (!btn) return;
   var url = btn.getAttribute('data-copy-link');
   var done = function () {
     var fb = btn.parentElement.querySelector('[data-copy-feedback]');
     if (fb) { fb.classList.remove('hidden'); setTimeout(function () { fb.classList.add('hidden'); }, 2000); }
+    if (window.toast) window.toast.success('Link copied', { title: 'Share' });
   };
-  if (navigator.share && window.matchMedia('(max-width: 640px)').matches) {
-    navigator.share({ url: url }).catch(function () {});
-    return;
-  }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(done).catch(function () { window.prompt('Copy this link:', url); });
   } else {
     window.prompt('Copy this link:', url);
+  }
+});
+document.querySelectorAll('[data-native-share-btn]').forEach(function (btn) {
+  if (navigator.share) {
+    btn.classList.remove('hidden');
   }
 });
 </script>

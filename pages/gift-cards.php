@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $pageTitle = 'Gift Cards – Hair by Claudia Darlene';
 $pageDescription = 'Give the gift of choice with a By Claudia Darlene digital gift card. Delivered instantly by email.';
-$canonical = url('index.php?page=gift-cards');
+$canonical = url('gift-cards');
 
 $bounds = gift_amount_bounds();
 $denoms = gift_denominations();

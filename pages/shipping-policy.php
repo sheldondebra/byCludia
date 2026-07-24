@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $pageTitle = 'Shipping Policy – Hair by Claudia Darlene';
 $pageDescription = 'Worldwide DHL Express shipping policy for Hair by Claudia Darlene custom hair orders.';
-$canonical = url('index.php?page=shipping-policy');
+$canonical = url('shipping');
 $policyHeading = 'Shipping Policy';
 $policyIntro = 'At Hair by Claudia Darlene, we are committed to delivering your order with speed, care, and style — no matter where you are in the world.';
 

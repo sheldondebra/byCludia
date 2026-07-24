@@ -19,8 +19,8 @@ if ($q !== '') {
     $s->execute([$like]);
     $products = $s->fetchAll();
 
-    $s = db()->prepare("SELECT id, name, email FROM users WHERE role = 'customer' AND (name LIKE ? OR email LIKE ?) ORDER BY id DESC LIMIT 20");
-    $s->execute([$like, $like]);
+    $s = db()->prepare("SELECT id, name, email, phone FROM users WHERE role = 'customer' AND (name LIKE ? OR email LIKE ? OR phone LIKE ?) ORDER BY id DESC LIMIT 20");
+    $s->execute([$like, $like, $like]);
     $customers = $s->fetchAll();
 }
 
@@ -66,9 +66,13 @@ require __DIR__ . '/_layout_top.php';
     <h2 class="font-display text-2xl mb-3 flex items-center gap-2"><?= admin_icon('users') ?> Customers</h2>
     <div class="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
       <?php foreach ($customers as $c): ?>
-        <a href="orders.php?q=<?= urlencode((string) $c['email']) ?>" class="flex items-center justify-between px-4 py-3 text-sm hover:bg-stone-50">
+        <?php
+          $customerContact = (string) ($c['email'] ?: ($c['phone'] ?? ''));
+          $ordersQ = $customerContact !== '' ? $customerContact : (string) $c['name'];
+        ?>
+        <a href="orders.php?q=<?= urlencode($ordersQ) ?>" class="flex items-center justify-between px-4 py-3 text-sm hover:bg-stone-50">
           <span><?= e($c['name']) ?></span>
-          <span class="text-stone-500"><?= e($c['email']) ?></span>
+          <span class="text-stone-500"><?= e($customerContact !== '' ? $customerContact : '—') ?></span>
         </a>
       <?php endforeach; ?>
       <?php if (!$customers): ?><p class="px-4 py-4 text-sm text-stone-400">No matching customers</p><?php endif; ?>

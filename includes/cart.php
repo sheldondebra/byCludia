@@ -175,3 +175,15 @@ function cart_clear(): void
     $cart = get_or_create_cart();
     db()->prepare('DELETE FROM cart_items WHERE cart_id = ?')->execute([$cart['id']]);
 }
+
+/** HTML for the header cart hover preview (items + footer). */
+function cart_preview_html(): string
+{
+    $items = cart_items();
+    $subtotal = money(cart_subtotal_gbp());
+    $cartUrl = url('index.php?page=cart');
+    $shopUrl = url('index.php?page=shop');
+    ob_start();
+    require ROOT_PATH . '/includes/partials/cart-preview.php';
+    return (string) ob_get_clean();
+}

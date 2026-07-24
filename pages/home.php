@@ -70,7 +70,22 @@ require ROOT_PATH . '/includes/header.php';
 
 <section class="hero-vibe relative min-h-[92vh] flex items-end sm:items-center justify-center overflow-hidden">
   <div class="absolute inset-0">
-    <img src="<?= e(asset('assets/images/hero-bg.png')) ?>" alt="Textured hair by Claudia Darlene" class="hero-bg absolute inset-0 w-full h-full object-cover object-top">
+    <img
+      src="<?= e(asset('assets/images/hero-bg.png')) ?>"
+      alt=""
+      class="hero-bg hero-bg--poster absolute inset-0 w-full h-full object-cover object-top"
+      aria-hidden="true"
+    >
+    <div class="hero-bg hero-bg--video absolute inset-0 overflow-hidden" data-hero-video aria-hidden="true">
+      <iframe
+        class="hero-bg__iframe"
+        data-src="https://player.vimeo.com/video/1212316521?background=1&autoplay=1&muted=1&loop=1&byline=0&title=0&portrait=0"
+        title="Hero background video"
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowfullscreen
+        loading="eager"
+      ></iframe>
+    </div>
     <div class="hero-vibe__wash absolute inset-0" aria-hidden="true"></div>
     <div class="hero-vibe__vignette absolute inset-0" aria-hidden="true"></div>
     <div class="hero-vibe__grain absolute inset-0" aria-hidden="true"></div>
@@ -82,10 +97,10 @@ require ROOT_PATH . '/includes/header.php';
         Luxury hair for every curl story
       </p>
       <h1 class="hero-copy hero-vibe__title font-display text-6xl sm:text-7xl md:text-8xl lg:text-[7.5rem] font-medium leading-[0.92] mb-6">
-        <?= e(setting('hero_title', 'The Color Edit')) ?>
+        <?= e(setting('hero_title', 'Luxury Textured Hair')) ?>
       </h1>
       <p class="hero-copy hero-vibe__sub text-base sm:text-lg md:text-xl text-white/90 max-w-xl mx-auto mb-10 leading-relaxed">
-        <?= e(setting('hero_subtitle', 'Reflect your inner beauty through everyday color.')) ?>
+        <?= e(setting('hero_subtitle', 'Designed to blend seamlessly with your natural hair.')) ?>
       </p>
       <a href="<?= e(url('index.php?page=shop')) ?>" class="hero-cta inline-block btn-blush px-10 py-4 text-sm tracking-[0.16em] uppercase font-medium shadow-soft">
         Shop Now
@@ -101,7 +116,7 @@ require ROOT_PATH . '/includes/header.php';
 
 <section id="about-brand" class="py-20 sm:py-24">
   <div class="max-w-3xl mx-auto px-6 text-center reveal">
-    <h2 class="font-display text-4xl sm:text-5xl mb-5">About Hair by Claudia Darlene</h2>
+    <h2 class="font-display text-4xl sm:text-5xl mb-5">About by Claudia Darlene</h2>
     <p class="text-brand-soft leading-relaxed text-base sm:text-lg mb-8">
       <?= e(setting('about_blurb')) ?>
     </p>

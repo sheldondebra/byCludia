@@ -6,23 +6,116 @@ function e(?string $value): string
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-function redirect(string $path): never
+function redirect(string $path, int $status = 302): never
 {
     global $config;
-    $url = str_starts_with($path, 'http') ? $path : rtrim($config['app_url'], '/') . '/' . ltrim($path, '/');
-    header('Location: ' . $url);
+    if (!str_starts_with($path, 'http')) {
+        $pretty = store_pretty_path($path);
+        if (preg_match('#^https?://#i', $pretty)) {
+            $path = $pretty;
+        } else {
+            $base = rtrim((string) $config['app_url'], '/');
+            $path = $pretty === '' ? $base . '/' : $base . '/' . ltrim($pretty, '/');
+        }
+    }
+    header('Location: ' . $path, true, $status);
     exit;
 }
 
 function url(string $path = ''): string
 {
     global $config;
-    return rtrim($config['app_url'], '/') . '/' . ltrim($path, '/');
+    $base = rtrim((string) $config['app_url'], '/');
+    if ($path === '' || $path === '/') {
+        return $base . '/';
+    }
+    if (preg_match('#^https?://#i', $path)) {
+        return $path;
+    }
+    $pretty = store_pretty_path($path);
+    if (preg_match('#^https?://#i', $pretty)) {
+        return $pretty;
+    }
+    if ($pretty === '' || $pretty === '/') {
+        return $base . '/';
+    }
+    return $base . '/' . ltrim($pretty, '/');
 }
 
 function asset(string $path): string
 {
     return url(ltrim($path, '/'));
+}
+
+/** Digits-only phone for wa.me links (keeps country code, strips + and spaces). */
+function whatsapp_number(?string $phone = null): string
+{
+    $phone = $phone ?? (string) setting('contact_phone', '');
+    return preg_replace('/\D+/', '', $phone) ?? '';
+}
+
+/**
+ * Build a WhatsApp click-to-chat URL with a prefilled order message.
+ *
+ * @param array{name?:string,variant?:string,quantity?:int|string,price?:string,url?:string} $order
+ */
+function whatsapp_order_url(array $order = [], ?string $phone = null): string
+{
+    $wa = whatsapp_number($phone);
+    if ($wa === '') {
+        return '#';
+    }
+    $store = setting('store_name', 'By Claudia Darlene') ?: 'By Claudia Darlene';
+    $lines = [
+        'Hi ' . $store . '! I would like to order:',
+        '',
+        '• Product: ' . trim((string) ($order['name'] ?? 'Product')),
+    ];
+    $variant = trim((string) ($order['variant'] ?? ''));
+    if ($variant !== '') {
+        $lines[] = '• Option: ' . $variant;
+    }
+    $qty = (int) ($order['quantity'] ?? 1);
+    $lines[] = '• Quantity: ' . max(1, $qty);
+    $price = trim((string) ($order['price'] ?? ''));
+    if ($price !== '') {
+        $lines[] = '• Price: ' . $price;
+    }
+    $productUrl = trim((string) ($order['url'] ?? ''));
+    if ($productUrl !== '') {
+        $lines[] = '';
+        $lines[] = 'Link: ' . $productUrl;
+    }
+    $lines[] = '';
+    $lines[] = 'Please confirm availability and how to pay. Thank you!';
+    return 'https://wa.me/' . $wa . '?text=' . rawurlencode(implode("\n", $lines));
+}
+
+/**
+ * WhatsApp link to ask a product question (prefilled; user types the question).
+ *
+ * @param array{name?:string,url?:string} $ctx
+ */
+function whatsapp_question_url(array $ctx = [], ?string $phone = null): string
+{
+    $wa = whatsapp_number($phone);
+    if ($wa === '') {
+        return '#';
+    }
+    $store = setting('store_name', 'By Claudia Darlene') ?: 'By Claudia Darlene';
+    $lines = [
+        'Hi ' . $store . '!',
+        '',
+        'I have a question about this product:',
+        '• ' . trim((string) ($ctx['name'] ?? 'Product')),
+    ];
+    $productUrl = trim((string) ($ctx['url'] ?? ''));
+    if ($productUrl !== '') {
+        $lines[] = '• Link: ' . $productUrl;
+    }
+    $lines[] = '';
+    $lines[] = 'My question:';
+    return 'https://wa.me/' . $wa . '?text=' . rawurlencode(implode("\n", $lines));
 }
 
 /** Absolute URL of the page currently being requested (for canonical/og:url fallback). */
@@ -187,9 +280,14 @@ function admin_status_badge(string $status): string
 function admin_active_nav(string $file): string
 {
     $current = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    $isActive = $current === $file;
+    // Group Email Marketing pages under the email.php nav item
+    if ($file === 'email.php' && str_starts_with($current, 'email')) {
+        $isActive = true;
+    }
     $active = 'flex items-center gap-3 rounded-lg px-3 py-2 bg-[#F3C4C4] text-stone-900 font-semibold';
     $idle   = 'flex items-center gap-3 rounded-lg px-3 py-2 text-stone-300 hover:text-white hover:bg-white/5';
-    return $current === $file ? $active : $idle;
+    return $isActive ? $active : $idle;
 }
 
 /**
@@ -268,3 +366,41 @@ function recompute_product_rating(int $productId): void
     db()->prepare('UPDATE products SET rating = ?, review_count = ? WHERE id = ?')
         ->execute([$avg, $count, $productId]);
 }
+
+/**
+ * Ensure a user has a wishlist share token. Pass $rotate=true to invalidate the old link.
+ */
+function user_wishlist_share_token(int $userId, bool $rotate = false): string
+{
+    if ($userId <= 0) {
+        return '';
+    }
+    if (!$rotate) {
+        $stmt = db()->prepare('SELECT wishlist_share_token FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $existing = trim((string) ($stmt->fetchColumn() ?: ''));
+        if ($existing !== '') {
+            return $existing;
+        }
+    }
+
+    do {
+        $token = bin2hex(random_bytes(16));
+        $check = db()->prepare('SELECT 1 FROM users WHERE wishlist_share_token = ?');
+        $check->execute([$token]);
+        $taken = (bool) $check->fetchColumn();
+    } while ($taken);
+
+    db()->prepare('UPDATE users SET wishlist_share_token = ? WHERE id = ?')->execute([$token, $userId]);
+    return $token;
+}
+
+function wishlist_share_url(string $token): string
+{
+    $token = trim($token);
+    if ($token === '') {
+        return url('wishlist');
+    }
+    return url('wishlist/share/' . rawurlencode($token));
+}
+

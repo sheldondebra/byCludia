@@ -12,6 +12,7 @@ $robots = $robots ?? 'index, follow';
 $ogType = $ogType ?? 'website';
 $ogImage = isset($ogImage) ? $ogImage : (string) setting('og_image', $logoPath);
 $ogImageUrl = str_starts_with((string) $ogImage, 'http') ? (string) $ogImage : asset((string) $ogImage);
+$ogImageAlt = $ogImageAlt ?? $siteName;
 $pageJsonLd = $jsonLd ?? null;
 $user = current_user();
 $cartCount = cart_count();
@@ -30,7 +31,7 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title><?= e($pageTitle) ?></title>
   <meta name="description" content="<?= e($pageDescription) ?>">
   <meta name="robots" content="<?= e($robots) ?>">
@@ -44,6 +45,7 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
   <meta property="og:description" content="<?= e($pageDescription) ?>">
   <meta property="og:url" content="<?= e($canonical) ?>">
   <meta property="og:image" content="<?= e($ogImageUrl) ?>">
+  <meta property="og:image:alt" content="<?= e((string) $ogImageAlt) ?>">
   <meta property="og:locale" content="en_GB">
 
   <!-- Twitter -->
@@ -51,25 +53,13 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
   <meta name="twitter:title" content="<?= e($pageTitle) ?>">
   <meta name="twitter:description" content="<?= e($pageDescription) ?>">
   <meta name="twitter:image" content="<?= e($ogImageUrl) ?>">
+  <meta name="twitter:image:alt" content="<?= e((string) $ogImageAlt) ?>">
 
   <link rel="icon" type="image/png" href="<?= e(asset($logoPath)) ?>">
   <link rel="apple-touch-icon" href="<?= e(asset($logoPath)) ?>">
 
   <!-- Sitewide structured data -->
-  <?= json_ld([
-      '@context' => 'https://schema.org',
-      '@type' => 'Organization',
-      'name' => $siteName,
-      'url' => url(),
-      'logo' => asset($logoPath),
-      'email' => setting('contact_email', ''),
-      'telephone' => setting('contact_phone', ''),
-      'sameAs' => array_values(array_filter([
-          setting('social_instagram', ''),
-          setting('social_tiktok', ''),
-          setting('social_facebook', ''),
-      ])),
-  ]) ?>
+  <?= json_ld(seo_organization_jsonld()) ?>
   <?= json_ld([
       '@context' => 'https://schema.org',
       '@type' => 'WebSite',
@@ -77,7 +67,7 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
       'url' => url(),
       'potentialAction' => [
           '@type' => 'SearchAction',
-          'target' => url('index.php?page=shop') . '&q={search_term_string}',
+          'target' => rtrim(url('shop'), '/') . '?q={search_term_string}',
           'query-input' => 'required name=search_term_string',
       ],
   ]) ?>
@@ -119,15 +109,15 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
     <?= e($promo) ?>
   </div>
 
-  <header class="sticky top-0 z-50 bg-brand-cream/80 backdrop-blur-xl border-b border-brand-ink/5 shadow-[0_2px_20px_rgba(28,25,23,0.04)]">
+  <header class="site-header sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16 sm:h-20 gap-4">
         <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-[12px] tracking-[0.18em] uppercase">
           <a class="nav-link <?= active_nav('home') ?>" href="<?= e(url('index.php?page=home')) ?>">Home</a>
-          <a class="nav-link <?= active_nav('shop') ?>" href="<?= e(url('index.php?page=shop')) ?>">Shop</a>
-          <a class="nav-link <?= active_nav('about') ?>" href="<?= e(url('index.php?page=about')) ?>">About</a>
-          <a class="nav-link <?= active_nav('blog') ?>" href="<?= e(url('index.php?page=blog')) ?>">Blog</a>
-          <a class="nav-link <?= active_nav('faq') ?>" href="<?= e(url('index.php?page=faq')) ?>">FAQ</a>
+          <a class="nav-link <?= active_nav('shop') ?>" href="<?= e(url('index.php?page=shop')) ?>">Our Collection</a>
+          <a class="nav-link <?= active_nav('about') ?>" href="<?= e(url('index.php?page=about')) ?>">Our Story</a>
+          <a class="nav-link <?= active_nav('blog') ?>" href="<?= e(url('index.php?page=blog')) ?>">Journal</a>
+          <a class="nav-link <?= active_nav('faq') ?>" href="<?= e(url('index.php?page=faq')) ?>">Care</a>
         </nav>
 
         <button id="mobile-menu-btn" class="md:hidden p-2 -ml-2 rounded-full hover:bg-brand-blush/40 transition" aria-label="Open menu">
@@ -160,23 +150,30 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
           <a href="<?= e(url('index.php?page=' . ($user ? 'account' : 'login'))) ?>" class="p-2.5 rounded-full hover:bg-brand-blush/50 transition" aria-label="Account">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
           </a>
-          <a href="<?= e(url('index.php?page=cart')) ?>" class="relative flex items-center gap-2 pl-2.5 pr-3.5 py-2 ml-1 rounded-full bg-brand-ink text-white hover:bg-brand-ink/90 transition" aria-label="Cart">
-            <span class="relative">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1.4 9.2A2 2 0 0115.62 20H8.38a2 2 0 01-1.98-1.8L5 9z"/></svg>
-              <span id="cart-count" class="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-brand-blushDeep text-brand-ink text-[10px] font-semibold flex items-center justify-center px-1"><?= (int) $cartCount ?></span>
-            </span>
-            <span id="cart-total" class="hidden lg:inline text-xs font-medium tabular-nums"><?= e($cartTotal) ?></span>
-          </a>
+          <div class="cart-nav relative ml-1">
+            <a href="<?= e(url('index.php?page=cart')) ?>" class="cart-nav__trigger relative flex items-center gap-2 pl-2.5 pr-3.5 py-2 rounded-full bg-brand-ink text-white hover:bg-brand-ink/90 transition" aria-label="Cart" aria-haspopup="true" aria-expanded="false" aria-controls="cart-preview">
+              <span class="relative">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1.4 9.2A2 2 0 0115.62 20H8.38a2 2 0 01-1.98-1.8L5 9z"/></svg>
+                <span id="cart-count" class="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-brand-blushDeep text-brand-ink text-[10px] font-semibold flex items-center justify-center px-1"><?= (int) $cartCount ?></span>
+              </span>
+              <span id="cart-total" class="hidden lg:inline text-xs font-medium tabular-nums"><?= e($cartTotal) ?></span>
+            </a>
+            <div id="cart-preview" class="cart-nav__panel" role="region" aria-label="Cart preview">
+              <div id="cart-preview-body" class="cart-nav__body">
+                <?= cart_preview_html() ?>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
     <div id="mobile-menu" class="hidden md:hidden border-t border-brand-ink/10 bg-brand-blush">
       <div class="px-4 py-4 flex flex-col gap-3 text-sm tracking-[0.14em] uppercase">
         <a href="<?= e(url('index.php?page=home')) ?>">Home</a>
-        <a href="<?= e(url('index.php?page=shop')) ?>">Shop</a>
-        <a href="<?= e(url('index.php?page=about')) ?>">About</a>
-        <a href="<?= e(url('index.php?page=blog')) ?>">Blog</a>
-        <a href="<?= e(url('index.php?page=faq')) ?>">FAQ</a>
+        <a href="<?= e(url('index.php?page=shop')) ?>">Our Collection</a>
+        <a href="<?= e(url('index.php?page=about')) ?>">Our Story</a>
+        <a href="<?= e(url('index.php?page=blog')) ?>">Journal</a>
+        <a href="<?= e(url('index.php?page=faq')) ?>">Care</a>
         <a href="<?= e(url('index.php?page=contact')) ?>">Contact</a>
         <a href="<?= e(url('index.php?page=wishlist')) ?>">Wishlist</a>
         <a href="<?= e(url('index.php?page=compare')) ?>">Compare</a>

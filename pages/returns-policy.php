@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $pageTitle = 'Returns Policy – Hair by Claudia Darlene';
 $pageDescription = 'Returns policy for custom-made hair extensions and wigs from Hair by Claudia Darlene.';
-$canonical = url('index.php?page=returns-policy');
+$canonical = url('returns');
 $policyHeading = 'Returns Policy';
 $policyIntro = 'At Hair by Claudia Darlene, we pride ourselves on providing high-quality, custom-made real hair extensions and wigs tailored to meet your specific needs. Due to the bespoke nature of our products, we kindly ask that you review our Returns Policy carefully before placing an order.';
 

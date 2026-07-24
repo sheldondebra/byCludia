@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-$pageTitle = 'Blog – Hair by Claudia Darlene';
-$pageDescription = 'Texture tips, hair care rituals, and curl stories from Hair by Claudia Darlene.';
+$pageTitle = 'Journal – Hair Care & Texture Guides | By Claudia Darlene';
+$pageDescription = 'SEO guides on washing virgin hair extensions, keeping curly and coily textures soft, night care, and choosing By Claudia Darlene bundles, units, clip-ins, and crochet.';
 $canonical = url('blog');
 $posts = db()->query('SELECT * FROM blog_posts WHERE is_published = 1 ORDER BY published_at DESC, id DESC')->fetchAll();
 
@@ -12,7 +12,7 @@ require ROOT_PATH . '/includes/header.php';
 <section class="py-16 sm:py-20">
   <div class="max-w-6xl mx-auto px-6">
     <h1 class="font-display text-5xl text-center mb-4">Journal</h1>
-    <p class="text-center text-brand-soft mb-12 max-w-xl mx-auto">Texture tips, launches, and curl stories from the Claudia Darlene studio.</p>
+    <p class="text-center text-brand-soft mb-12 max-w-2xl mx-auto">Hair-care rituals and product guides for virgin textured extensions — wash days, night protection, and finding your perfect match in Our Collection. Photos from <a class="underline hover:text-brand-ink" href="<?= e((string) setting('social_instagram', 'https://www.instagram.com/byclaudiadarlene/')) ?>" target="_blank" rel="noopener">@byclaudiadarlene</a>.</p>
 
     <?php if (!$posts): ?>
       <div class="text-center bg-white/70 rounded-3xl border border-brand-ink/5 p-10">
@@ -26,7 +26,7 @@ require ROOT_PATH . '/includes/header.php';
             <a href="<?= $link ?>" class="block">
               <?php if (!empty($post['image'])): ?>
                 <div class="aspect-[16/10] overflow-hidden">
-                  <img src="<?= e(asset((string) $post['image'])) ?>" alt="<?= e($post['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                  <img src="<?= e(asset((string) $post['image'])) ?>" alt="<?= e($post['title']) ?>" class="blog-photo w-full h-full object-cover group-hover:scale-105 transition duration-500">
                 </div>
               <?php else: ?>
                 <div class="aspect-[16/10] bg-gradient-to-br from-brand-mist via-brand-blush/60 to-[#e8c4a8] flex items-end p-5">

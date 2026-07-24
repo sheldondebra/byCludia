@@ -30,11 +30,17 @@ if (PHP_SAPI !== 'cli' && !empty($_SERVER['HTTP_HOST'])) {
 
 require_once ROOT_PATH . '/includes/db.php';
 require_once ROOT_PATH . '/includes/helpers.php';
+require_once ROOT_PATH . '/includes/routes.php';
+require_once ROOT_PATH . '/includes/seo.php';
 require_once ROOT_PATH . '/includes/video.php';
 require_once ROOT_PATH . '/includes/currency.php';
 require_once ROOT_PATH . '/includes/cart.php';
 require_once ROOT_PATH . '/includes/auth.php';
 require_once ROOT_PATH . '/includes/mailer.php';
+require_once ROOT_PATH . '/includes/email_marketing.php';
 require_once ROOT_PATH . '/includes/sms.php';
 require_once ROOT_PATH . '/includes/payments.php';
 require_once ROOT_PATH . '/includes/gift.php';
+require_once ROOT_PATH . '/includes/geo.php';
+require_once ROOT_PATH . '/includes/promo.php';
+require_once ROOT_PATH . '/includes/tracking.php';

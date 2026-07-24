@@ -58,6 +58,24 @@ if (request_method() === 'POST' && verify_csrf(post('csrf_token'))) {
     $featured = post('is_featured') ? 1 : 0;
     $onSale = post('on_sale') ? 1 : 0;
     $active = post('is_active') ? 1 : 0;
+    $seoTitle = mb_substr(trim((string) post('seo_title')), 0, 70);
+    $seoDescription = mb_substr(trim((string) post('seo_description')), 0, 320);
+    $focusKeyword = mb_substr(trim((string) post('focus_keyword')), 0, 80);
+    $imageAlt = mb_substr(trim((string) post('image_alt')), 0, 160);
+    $faqQs = (array) post('faq_q', []);
+    $faqAs = (array) post('faq_a', []);
+    $faqs = [];
+    foreach ($faqQs as $i => $q) {
+        $q = trim((string) $q);
+        $a = trim((string) ($faqAs[$i] ?? ''));
+        if ($q !== '' && $a !== '') {
+            $faqs[] = ['question' => $q, 'answer' => $a];
+        }
+        if (count($faqs) >= 8) {
+            break;
+        }
+    }
+    $faqJson = $faqs ? json_encode($faqs, JSON_UNESCAPED_UNICODE) : null;
 
     // Existing gallery
     $gallery = [];
@@ -147,15 +165,15 @@ if (request_method() === 'POST' && verify_csrf(post('csrf_token'))) {
     } else {
         if ($id > 0) {
             db()->prepare(
-                'UPDATE products SET category_id=?, name=?, slug=?, short_description=?, description=?, base_price=?, compare_at_price=?, rating=?, review_count=?, image=?, gallery=?, video=?, is_featured=?, on_sale=?, is_active=? WHERE id=?'
-            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $active, $id]);
+                'UPDATE products SET category_id=?, name=?, slug=?, short_description=?, description=?, base_price=?, compare_at_price=?, rating=?, review_count=?, image=?, gallery=?, video=?, is_featured=?, on_sale=?, is_active=?, seo_title=?, seo_description=?, focus_keyword=?, image_alt=?, faq_json=? WHERE id=?'
+            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $active, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $imageAlt ?: null, $faqJson, $id]);
         } else {
             if ($image === '') {
                 $image = 'assets/images/products/p1.svg';
             }
             db()->prepare(
-                'INSERT INTO products (category_id, name, slug, short_description, description, base_price, compare_at_price, rating, review_count, image, gallery, video, is_featured, on_sale, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $active]);
+                'INSERT INTO products (category_id, name, slug, short_description, description, base_price, compare_at_price, rating, review_count, image, gallery, video, is_featured, on_sale, is_active, seo_title, seo_description, focus_keyword, image_alt, faq_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $active, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $imageAlt ?: null, $faqJson]);
             $id = (int) db()->lastInsertId();
         }
 
@@ -417,6 +435,57 @@ require __DIR__ . '/_layout_top.php';
       </div>
       <?php if (!$variants): ?><p class="text-xs text-stone-400 mt-3">No variants yet — add one above, or a default set is created on first save.</p><?php endif; ?>
     </div>
+
+    <?php
+    $productFaqs = seo_parse_faq(isset($product['faq_json']) ? (string) $product['faq_json'] : null);
+    if (!$productFaqs) {
+        $productFaqs = [['question' => '', 'answer' => '']];
+    }
+    $serpTitle = trim((string) ($product['seo_title'] ?? '')) ?: trim((string) ($product['name'] ?? 'Product name'));
+    $serpDesc = trim((string) ($product['seo_description'] ?? '')) ?: trim((string) ($product['short_description'] ?? 'Meta description preview…'));
+    $serpUrl = !empty($product['slug']) ? url('product/' . $product['slug']) : url('product/your-slug');
+    ?>
+    <div class="bg-white rounded-2xl border border-stone-200 p-6 space-y-4">
+      <h2 class="font-medium flex items-center gap-2"><?= admin_icon('search', 'w-4 h-4 text-stone-400') ?> SEO</h2>
+      <div class="rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <p class="text-xs text-stone-400 mb-1">Google preview</p>
+        <p class="text-[#1a0dab] text-lg leading-snug truncate" id="serp-title"><?= e(seo_format_title($serpTitle)) ?></p>
+        <p class="text-[#006621] text-xs truncate" id="serp-url"><?= e($serpUrl) ?></p>
+        <p class="text-sm text-stone-600 mt-1 line-clamp-2" id="serp-desc"><?= e(mb_substr($serpDesc, 0, 160)) ?></p>
+      </div>
+      <div>
+        <label class="text-xs text-stone-500 mb-1 block">SEO title <span class="text-stone-400" id="seo-title-count">0</span>/60</label>
+        <input name="seo_title" id="seo-title" maxlength="70" value="<?= e($product['seo_title'] ?? '') ?>" placeholder="Defaults to product name" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]">
+      </div>
+      <div>
+        <label class="text-xs text-stone-500 mb-1 block">Meta description <span class="text-stone-400" id="seo-desc-count">0</span>/160</label>
+        <textarea name="seo_description" id="seo-description" rows="3" maxlength="320" placeholder="Defaults to short description" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]"><?= e($product['seo_description'] ?? '') ?></textarea>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-stone-500 mb-1 block">Focus keyword</label>
+          <input name="focus_keyword" value="<?= e($product['focus_keyword'] ?? '') ?>" placeholder="e.g. afro kinky curly bundles" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]">
+        </div>
+        <div>
+          <label class="text-xs text-stone-500 mb-1 block">Image alt text</label>
+          <input name="image_alt" value="<?= e($product['image_alt'] ?? '') ?>" placeholder="Defaults to product name" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]">
+        </div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-xs text-stone-500 block">Product FAQs (schema)</label>
+          <button type="button" id="add-faq" class="text-xs text-stone-600 underline">Add FAQ</button>
+        </div>
+        <div id="faq-list" class="space-y-3">
+          <?php foreach ($productFaqs as $faq): ?>
+            <div class="grid gap-2 rounded-xl border border-stone-100 p-3 bg-stone-50/50">
+              <input name="faq_q[]" value="<?= e($faq['question']) ?>" placeholder="Question" class="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm">
+              <textarea name="faq_a[]" rows="2" placeholder="Answer" class="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"><?= e($faq['answer']) ?></textarea>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Sidebar -->
@@ -476,6 +545,46 @@ require __DIR__ . '/_layout_top.php';
       tbody.appendChild(tr);
       n++;
     });
+
+    const faqList = document.getElementById('faq-list');
+    const addFaq = document.getElementById('add-faq');
+    if (addFaq && faqList) {
+      addFaq.addEventListener('click', function () {
+        if (faqList.children.length >= 8) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'grid gap-2 rounded-xl border border-stone-100 p-3 bg-stone-50/50';
+        wrap.innerHTML = '<input name="faq_q[]" placeholder="Question" class="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"><textarea name="faq_a[]" rows="2" placeholder="Answer" class="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm"></textarea>';
+        faqList.appendChild(wrap);
+      });
+    }
+
+    const titleInput = document.getElementById('seo-title');
+    const descInput = document.getElementById('seo-description');
+    const nameInput = document.querySelector('input[name="name"]');
+    const shortInput = document.querySelector('textarea[name="short_description"]');
+    const store = <?= json_encode(seo_store_name()) ?>;
+    const pattern = <?= json_encode(seo_title_pattern()) ?>;
+    const formatTitle = (page) => {
+      page = (page || '').trim() || 'Product name';
+      if (page.toLowerCase().includes(String(store).toLowerCase())) return page;
+      return String(pattern).replace('{page}', page).replace('{store}', store);
+    };
+    const syncSerp = () => {
+      const rawTitle = (titleInput && titleInput.value.trim()) || (nameInput && nameInput.value) || 'Product name';
+      const rawDesc = (descInput && descInput.value.trim()) || (shortInput && shortInput.value) || 'Meta description preview…';
+      const t = document.getElementById('serp-title');
+      const d = document.getElementById('serp-desc');
+      const tc = document.getElementById('seo-title-count');
+      const dc = document.getElementById('seo-desc-count');
+      if (t) t.textContent = formatTitle(rawTitle);
+      if (d) d.textContent = rawDesc.slice(0, 160);
+      if (tc && titleInput) tc.textContent = titleInput.value.length;
+      if (dc && descInput) dc.textContent = descInput.value.length;
+    };
+    [titleInput, descInput, nameInput, shortInput].forEach((el) => {
+      if (el) el.addEventListener('input', syncSerp);
+    });
+    syncSerp();
   })();
 </script>
 

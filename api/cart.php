@@ -14,9 +14,16 @@ if (!verify_csrf(post('csrf_token'))) {
 
 $action = (string) post('action', 'add');
 
+$withPreview = static function (array $result): array {
+    if (!empty($result['ok'])) {
+        $result['preview_html'] = cart_preview_html();
+    }
+    return $result;
+};
+
 if ($action === 'add') {
     $result = cart_add((int) post('product_id'), (int) post('variant_id'), max(1, (int) post('quantity', 1)));
-    json_response($result, $result['ok'] ? 200 : 400);
+    json_response($withPreview($result), $result['ok'] ? 200 : 400);
 }
 
 if ($action === 'add_gift') {
@@ -27,17 +34,17 @@ if ($action === 'add_gift') {
         (string) post('sender_name', ''),
         (string) post('message', '')
     );
-    json_response($result, $result['ok'] ? 200 : 400);
+    json_response($withPreview($result), $result['ok'] ? 200 : 400);
 }
 
 if ($action === 'update') {
     $result = cart_update((int) post('item_id'), (int) post('quantity'));
-    json_response($result, $result['ok'] ? 200 : 400);
+    json_response($withPreview($result), $result['ok'] ? 200 : 400);
 }
 
 if ($action === 'remove') {
     $result = cart_remove((int) post('item_id'));
-    json_response($result);
+    json_response($withPreview($result));
 }
 
 json_response(['ok' => false, 'error' => 'Unknown action'], 400);

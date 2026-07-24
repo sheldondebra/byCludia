@@ -31,8 +31,21 @@ if (request_method() === 'POST' && verify_csrf(post('csrf_token'))) {
     }
     $allowed = ['pending','paid','processing','shipped','delivered','cancelled','refunded'];
     if (in_array($status, $allowed, true)) {
+        $previousStatus = (string) $order['status'];
         db()->prepare('UPDATE orders SET status = ?, tracking_number = ?, shipping_carrier = ? WHERE id = ?')
             ->execute([$status, $tracking !== '' ? $tracking : null, $carrier !== '' ? $carrier : null, $id]);
+
+        if ($previousStatus !== $status) {
+            $mailed = notify_order_status_changed($id, $previousStatus, $status);
+            if ($mailed) {
+                flash('success', 'Order updated and customer emailed.');
+            } else {
+                flash('success', 'Order updated.' . (!empty($order['email']) ? ' Status email skipped (mail disabled or send failed).' : ' No customer email on file.'));
+            }
+        } else {
+            flash('success', 'Order updated.');
+        }
+
         header('Location: order.php?id=' . $id);
         exit;
     }

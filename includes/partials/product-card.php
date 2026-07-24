@@ -14,24 +14,28 @@ if ($cardUser = current_user()) {
     $favStmt->execute([(int) $cardUser['id'], (int) $product['id']]);
     $isFav = (bool) $favStmt->fetchColumn();
 }
-$productUrl = url('index.php?page=product&slug=' . urlencode($product['slug']));
+$productUrl = url('product/' . $product['slug']);
+$cardAlt = seo_product_alt($product);
 
-$cardGallery = [];
+$cardSlides = [];
+if (!empty($product['image']) && file_exists(ROOT_PATH . '/' . $product['image'])) {
+    $cardSlides[] = $product['image'];
+}
 if (!empty($product['gallery'])) {
     $decodedGallery = json_decode((string) $product['gallery'], true);
     if (is_array($decodedGallery)) {
-        $cardGallery = $decodedGallery;
+        foreach ($decodedGallery as $img) {
+            $img = (string) $img;
+            if ($img !== '' && file_exists(ROOT_PATH . '/' . $img) && !in_array($img, $cardSlides, true)) {
+                $cardSlides[] = $img;
+            }
+        }
     }
 }
-$hoverImage = null;
-foreach ($cardGallery as $img) {
-    if ($img && $img !== ($product['image'] ?? null) && file_exists(ROOT_PATH . '/' . $img)) {
-        $hoverImage = $img;
-        break;
-    }
-}
+$slideCount = count($cardSlides);
+$canSlide = $slideCount > 1;
 ?>
-<div class="product-card reveal group relative block">
+<div class="product-card reveal group relative block" <?= $canSlide ? 'data-card-slider' : '' ?>>
   <button type="button"
     data-wishlist-toggle="<?= (int) $product['id'] ?>"
     aria-pressed="<?= $isFav ? 'true' : 'false' ?>"
@@ -52,11 +56,25 @@ foreach ($cardGallery as $img) {
     <?php if (!empty($product['on_sale'])): ?>
       <span class="absolute top-3 left-14 z-10 text-[10px] tracking-[0.14em] uppercase bg-brand-ink text-white px-2.5 py-1 rounded-full">Sale</span>
     <?php endif; ?>
-    <a href="<?= e($productUrl) ?>" class="block w-full h-full">
-      <?php if (!empty($product['image']) && file_exists(ROOT_PATH . '/' . $product['image'])): ?>
-        <img src="<?= e(asset($product['image'])) ?>" alt="<?= e($product['name']) ?>" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500 <?= $hoverImage ? 'group-hover:opacity-0' : '' ?>">
-        <?php if ($hoverImage): ?>
-          <img src="<?= e(asset($hoverImage)) ?>" alt="<?= e($product['name']) ?> alternate view" class="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 group-hover:scale-105 transition duration-500" loading="lazy">
+    <a href="<?= e($productUrl) ?>" class="product-card__media block w-full h-full relative">
+      <?php if ($slideCount > 0): ?>
+        <div class="product-card__slides absolute inset-0" data-slide-track>
+          <?php foreach ($cardSlides as $i => $slide): ?>
+            <img
+              src="<?= e(asset($slide)) ?>"
+              alt="<?= e($cardAlt) ?><?= $i > 0 ? ' view ' . ($i + 1) : '' ?>"
+              class="product-card__slide absolute inset-0 w-full h-full object-cover <?= $i === 0 ? 'is-active' : '' ?>"
+              data-slide-index="<?= $i ?>"
+              <?= $i > 0 ? 'loading="lazy"' : '' ?>
+            >
+          <?php endforeach; ?>
+        </div>
+        <?php if ($canSlide): ?>
+          <div class="product-card__dots absolute bottom-14 left-0 right-0 z-10 flex justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition duration-300 pointer-events-none" aria-hidden="true">
+            <?php for ($i = 0; $i < $slideCount; $i++): ?>
+              <span class="product-card__dot <?= $i === 0 ? 'is-active' : '' ?>" data-dot-index="<?= $i ?>"></span>
+            <?php endfor; ?>
+          </div>
         <?php endif; ?>
       <?php else: ?>
         <div class="product-placeholder relative w-full h-full flex items-end p-5 overflow-hidden">
@@ -67,7 +85,7 @@ foreach ($cardGallery as $img) {
       <?php endif; ?>
     </a>
 
-    <div class="absolute inset-x-0 bottom-0 p-3 flex flex-col gap-2 translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition duration-300">
+    <div class="absolute inset-x-0 bottom-0 p-3 flex flex-col gap-2 translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition duration-300 z-10">
       <?php if ($cardVariantId > 0): ?>
         <button type="button" data-quick-add="<?= (int) $product['id'] ?>" data-variant="<?= $cardVariantId ?>"
           class="w-full rounded-full bg-white/95 backdrop-blur text-brand-ink py-2.5 text-xs tracking-[0.12em] uppercase font-medium hover:bg-white transition flex items-center justify-center gap-2">

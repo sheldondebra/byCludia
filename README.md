@@ -12,13 +12,13 @@ Clean, modern PHP ecommerce store for cPanel hosting.
 ## Quick start (local)
 
 ```bash
-cd byclaudiadarlene
-php -S localhost:8080
+cd byCludia
+php -S localhost:8080 router.php
 ```
 
 Open http://localhost:8080
 
-SQLite database is created automatically at `database/store.sqlite` with sample products.
+Pretty URLs work out of the box (e.g. `/shop`, `/product/your-slug`, `/about`). On Apache/cPanel, `.htaccess` handles the same routes.
 
 ## Admin
 

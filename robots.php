@@ -13,15 +13,15 @@ Disallow: /api/
 Disallow: /config/
 Disallow: /includes/
 Disallow: /vendor/
-Disallow: /*?*page=cart
-Disallow: /*?*page=checkout
-Disallow: /*?*page=checkout-return
-Disallow: /*?*page=account
-Disallow: /*?*page=login
-Disallow: /*?*page=register
-Disallow: /*?*page=wishlist
-Disallow: /*?*page=order-success
 Disallow: /cart
 Disallow: /checkout
+Disallow: /checkout-return
+Disallow: /account
+Disallow: /login
+Disallow: /register
+Disallow: /wishlist
+Disallow: /wishlist/
+Disallow: /order-success
+Disallow: /logout
 
 Sitemap: <?= url('sitemap.xml') . "\n" ?>

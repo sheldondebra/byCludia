@@ -4,6 +4,7 @@ declare(strict_types=1);
 $pageTitle = 'Page Not Found – Hair by Claudia Darlene';
 $pageDescription = "Sorry, we couldn't find the page you were looking for.";
 $robots = 'noindex, follow';
+$canonical = url('404');
 
 if (!headers_sent()) {
     http_response_code(404);
@@ -20,14 +21,19 @@ require ROOT_PATH . '/includes/header.php';
 ?>
 
 <section class="py-20 sm:py-28">
-  <div class="max-w-2xl mx-auto px-6 text-center">
-    <p class="font-display text-[7rem] sm:text-[9rem] leading-none text-brand-blush select-none">404</p>
-    <h1 class="font-display text-3xl sm:text-4xl mt-2 mb-4">This page slipped away</h1>
-    <p class="text-brand-soft leading-relaxed mb-8">The page you're looking for may have moved, sold out, or never existed. Let's get you back to something beautiful.</p>
+  <div class="max-w-xl mx-auto px-6 text-center">
+    <p class="text-[11px] tracking-[0.28em] uppercase text-brand-soft mb-5">Error 404</p>
+    <h1 class="font-display text-4xl sm:text-5xl leading-tight mb-4">Page not found</h1>
+    <p class="text-brand-soft leading-relaxed mb-10">
+      This link may be outdated, mistyped, or the page has moved. Head home or browse the collection.
+    </p>
     <div class="flex flex-wrap justify-center gap-3">
-      <a href="<?= e(url('index.php?page=home')) ?>" class="btn-ink px-8 py-3.5 text-sm tracking-[0.14em] uppercase">Back to home</a>
-      <a href="<?= e(url('index.php?page=shop')) ?>" class="rounded-full border border-brand-ink/15 px-8 py-3.5 text-sm tracking-[0.14em] uppercase hover:bg-brand-ink hover:text-white transition">Shop all</a>
+      <a href="<?= e(url()) ?>" class="btn-ink px-8 py-3.5 text-sm tracking-[0.14em] uppercase">Back to home</a>
+      <a href="<?= e(url('shop')) ?>" class="rounded-full border border-brand-ink/15 px-8 py-3.5 text-sm tracking-[0.14em] uppercase hover:bg-brand-ink hover:text-white transition">Shop collection</a>
     </div>
+    <p class="mt-8 text-sm text-brand-soft">
+      Need help? <a href="<?= e(url('contact')) ?>" class="underline underline-offset-4 decoration-brand-ink/20 hover:decoration-brand-ink hover:text-brand-ink transition">Contact us</a>
+    </p>
   </div>
 
   <?php if ($suggestions): ?>

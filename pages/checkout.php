@@ -22,6 +22,54 @@ $shipCarrier = $shipMethods[$selectedMethod]['carrier'];
 $user = current_user();
 $error = null;
 
+$form = [
+    'email' => '',
+    'shipping_name' => '',
+    'shipping_address' => '',
+    'shipping_city' => '',
+    'shipping_postcode' => '',
+    'shipping_country' => 'United Kingdom',
+    'phone' => '',
+    'coupon' => '',
+    'gift_card' => '',
+];
+
+if ($user) {
+    $form['email'] = (string) ($user['email'] ?? '');
+    $form['shipping_name'] = (string) ($user['name'] ?? '');
+    $form['phone'] = (string) ($user['phone'] ?? '');
+
+    $lastOrderStmt = db()->prepare(
+        'SELECT email, phone, shipping_name, shipping_address, shipping_city, shipping_country, shipping_postcode
+         FROM orders
+         WHERE user_id = ?
+            OR (email IS NOT NULL AND email != "" AND email = ?)
+         ORDER BY id DESC
+         LIMIT 1'
+    );
+    $lastOrderStmt->execute([(int) $user['id'], (string) ($user['email'] ?? '')]);
+    $lastOrder = $lastOrderStmt->fetch() ?: null;
+
+    if ($lastOrder) {
+        foreach (
+            [
+                'email',
+                'phone',
+                'shipping_name',
+                'shipping_address',
+                'shipping_city',
+                'shipping_country',
+                'shipping_postcode',
+            ] as $key
+        ) {
+            $value = trim((string) ($lastOrder[$key] ?? ''));
+            if ($value !== '') {
+                $form[$key] = $value;
+            }
+        }
+    }
+}
+
 if (request_method() === 'POST') {
     if (!verify_csrf(post('csrf_token'))) {
         $error = 'Invalid session. Please try again.';
@@ -36,26 +84,28 @@ if (request_method() === 'POST') {
         $method = (string) post('payment_method', 'stripe');
         $couponCode = strtoupper(trim((string) post('coupon', '')));
 
+        $form = [
+            'email' => $email,
+            'shipping_name' => $name,
+            'shipping_address' => $address,
+            'shipping_city' => $city,
+            'shipping_postcode' => $postcode,
+            'shipping_country' => $country !== '' ? $country : 'United Kingdom',
+            'phone' => $phone,
+            'coupon' => (string) post('coupon', ''),
+            'gift_card' => (string) post('gift_card', ''),
+        ];
+
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $name === '' || $address === '' || $city === '') {
             $error = 'Please complete all required fields.';
         } else {
             $discount = 0.0;
             if ($couponCode !== '') {
-                $cStmt = db()->prepare('SELECT * FROM coupons WHERE code = ? LIMIT 1');
-                $cStmt->execute([$couponCode]);
-                $coupon = $cStmt->fetch();
-                if (!$coupon || !$coupon['is_active']) {
-                    $error = 'Invalid coupon code.';
-                } elseif (!empty($coupon['expires_at']) && strtotime((string) $coupon['expires_at']) < strtotime('today')) {
-                    $error = 'This coupon has expired.';
-                } elseif (!empty($coupon['max_uses']) && (int) $coupon['used_count'] >= (int) $coupon['max_uses']) {
-                    $error = 'This coupon has reached its usage limit.';
-                } elseif (!empty($coupon['min_order']) && $subtotal < (float) $coupon['min_order']) {
-                    $error = 'This coupon requires a minimum order of ' . money((float) $coupon['min_order']) . '.';
-                } elseif ($coupon['type'] === 'percent') {
-                    $discount = round($subtotal * ((float) $coupon['value'] / 100), 2);
+                $couponCheck = coupon_validate($couponCode, $subtotal);
+                if (!$couponCheck['valid']) {
+                    $error = $couponCheck['message'] !== '' ? $couponCheck['message'] . '.' : 'Invalid coupon code.';
                 } else {
-                    $discount = min($subtotal, (float) $coupon['value']);
+                    $discount = (float) ($couponCheck['discount'] ?? 0);
                 }
             }
 
@@ -64,9 +114,11 @@ if (request_method() === 'POST') {
             $giftApplied = 0.0;
             $giftCard = null;
             if (!$error && $giftCode !== '') {
-                $giftCard = gift_card_find($giftCode);
-                if (!$giftCard || $giftCard['status'] !== 'active' || (float) $giftCard['balance'] <= 0) {
-                    $error = 'That gift card code is invalid or has no balance.';
+                $giftCheck = gift_card_validate($giftCode);
+                if (!$giftCheck['valid']) {
+                    $error = $giftCheck['message'] !== '' ? $giftCheck['message'] . '.' : 'That gift card code is invalid or has no balance.';
+                } else {
+                    $giftCard = gift_card_find($giftCode);
                 }
             }
 
@@ -213,14 +265,17 @@ require ROOT_PATH . '/includes/header.php';
       <form method="post" class="bg-white/70 border border-brand-ink/5 rounded-3xl p-6 sm:p-8 space-y-5">
         <?= csrf_field() ?>
         <h2 class="font-display text-2xl">Shipping details</h2>
+        <?php if ($user): ?>
+          <p class="text-sm text-brand-soft -mt-2">Signed in as <?= e((string) $user['name']) ?> — we filled in your saved details. Edit anything before paying.</p>
+        <?php endif; ?>
         <div class="grid sm:grid-cols-2 gap-4">
           <div class="sm:col-span-2">
             <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Email *</label>
-            <input name="email" type="email" required value="<?= e($user['email'] ?? '') ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <input name="email" type="email" required autocomplete="email" value="<?= e($form['email']) ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
           </div>
           <div class="sm:col-span-2">
             <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Full name *</label>
-            <input name="shipping_name" required value="<?= e($user['name'] ?? '') ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <input name="shipping_name" required autocomplete="name" value="<?= e($form['shipping_name']) ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
           </div>
           <div class="sm:col-span-2" data-address-autocomplete>
             <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Address *</label>
@@ -229,9 +284,10 @@ require ROOT_PATH . '/includes/header.php';
                 id="shipping_address"
                 name="shipping_address"
                 required
-                autocomplete="off"
+                autocomplete="street-address"
                 autocapitalize="words"
                 placeholder="Start typing your street address"
+                value="<?= e($form['shipping_address']) ?>"
                 class="w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm"
                 aria-autocomplete="list"
                 aria-controls="address-suggest-list"
@@ -242,28 +298,101 @@ require ROOT_PATH . '/includes/header.php';
             <p class="mt-1.5 text-[11px] text-brand-soft">Suggestions from OpenStreetMap · city &amp; country fill when empty</p>
           </div>
           <div>
-            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">City *</label>
-            <input id="shipping_city" name="shipping_city" required autocomplete="address-level2" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="shipping_city">City *</label>
+            <div class="place-combobox mt-1" data-place-combobox="city">
+              <input
+                id="shipping_city"
+                name="shipping_city"
+                required
+                autocomplete="address-level2"
+                placeholder="Search city"
+                value="<?= e($form['shipping_city']) ?>"
+                class="auth-input place-combobox__input"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="city-suggest-list"
+                aria-expanded="false"
+                <?= $form['shipping_city'] === '' ? ' data-autofill="1"' : '' ?>
+              >
+              <button type="button" class="place-combobox__chevron" data-place-toggle aria-label="Browse cities">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <ul id="city-suggest-list" class="address-suggest" role="listbox" hidden></ul>
+            </div>
+            <p class="mt-1.5 text-[11px] text-brand-soft">Type to search, or open the list</p>
           </div>
           <div>
-            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Postcode</label>
-            <input id="shipping_postcode" name="shipping_postcode" autocomplete="postal-code" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="shipping_postcode">Postcode</label>
+            <input id="shipping_postcode" name="shipping_postcode" autocomplete="postal-code" value="<?= e($form['shipping_postcode']) ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
           </div>
           <div>
-            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Country</label>
-            <input id="shipping_country" name="shipping_country" value="United Kingdom" data-autofill="1" autocomplete="country-name" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="shipping_country">Country</label>
+            <div class="place-combobox mt-1" data-place-combobox="country">
+              <input
+                id="shipping_country"
+                name="shipping_country"
+                autocomplete="country-name"
+                placeholder="Search country"
+                value="<?= e($form['shipping_country']) ?>"
+                class="auth-input place-combobox__input"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="country-suggest-list"
+                aria-expanded="false"
+                <?= ($form['shipping_country'] === 'United Kingdom' || $form['shipping_country'] === '') ? ' data-autofill="1"' : '' ?>
+              >
+              <button type="button" class="place-combobox__chevron" data-place-toggle aria-label="Browse countries">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <ul id="country-suggest-list" class="address-suggest" role="listbox" hidden></ul>
+            </div>
+            <p class="mt-1.5 text-[11px] text-brand-soft">Search or pick from the full country list</p>
           </div>
           <div>
             <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Phone</label>
-            <input name="phone" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <input name="phone" type="tel" autocomplete="tel" value="<?= e($form['phone']) ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
           </div>
           <div>
-            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Coupon code</label>
-            <input name="coupon" placeholder="SUMMER10" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
+            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="checkout-coupon">Coupon code</label>
+            <div class="code-field mt-1" data-code-validate="coupon">
+              <input
+                id="checkout-coupon"
+                name="coupon"
+                placeholder="SUMMER10"
+                value="<?= e($form['coupon']) ?>"
+                autocomplete="off"
+                spellcheck="false"
+                class="code-field__input"
+                data-code-input
+              >
+              <span class="code-field__status" data-code-status aria-hidden="true">
+                <svg class="code-field__icon code-field__icon--spin" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" opacity="0.25"/><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <svg class="code-field__icon code-field__icon--ok" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <svg class="code-field__icon code-field__icon--bad" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg>
+              </span>
+            </div>
+            <p class="code-field__msg" data-code-msg hidden></p>
           </div>
           <div>
-            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Gift card</label>
-            <input name="gift_card" placeholder="GC-XXXX-XXXX-XXXX" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm uppercase placeholder:normal-case">
+            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="checkout-gift">Gift card</label>
+            <div class="code-field mt-1" data-code-validate="gift">
+              <input
+                id="checkout-gift"
+                name="gift_card"
+                placeholder="GC-XXXX-XXXX-XXXX"
+                value="<?= e($form['gift_card']) ?>"
+                autocomplete="off"
+                spellcheck="false"
+                class="code-field__input uppercase placeholder:normal-case"
+                data-code-input
+              >
+              <span class="code-field__status" data-code-status aria-hidden="true">
+                <svg class="code-field__icon code-field__icon--spin" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" opacity="0.25"/><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <svg class="code-field__icon code-field__icon--ok" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <svg class="code-field__icon code-field__icon--bad" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg>
+              </span>
+            </div>
+            <p class="code-field__msg" data-code-msg hidden></p>
           </div>
         </div>
 
@@ -350,19 +479,85 @@ require ROOT_PATH . '/includes/header.php';
     if (checked) update(checked);
   }
 
-  const wrap = document.querySelector('[data-address-autocomplete]');
-  const address = document.getElementById('shipping_address');
-  const city = document.getElementById('shipping_city');
-  const postcode = document.getElementById('shipping_postcode');
-  const country = document.getElementById('shipping_country');
-  const list = document.getElementById('address-suggest-list');
-  if (!wrap || !address || !list) return;
+  // Live coupon / gift card validation
+  const bindCodeValidate = (root) => {
+    const input = root.querySelector('[data-code-input]');
+    const msg = root.parentElement?.querySelector('[data-code-msg]');
+    if (!input) return;
+    const type = root.getAttribute('data-code-validate');
+    let timer = null;
+    let abort = null;
+    let reqId = 0;
+
+    const setState = (state, message = '') => {
+      root.classList.remove('is-loading', 'is-valid', 'is-invalid');
+      if (state) root.classList.add(`is-${state}`);
+      if (msg) {
+        const show = !!message;
+        msg.hidden = !show;
+        msg.textContent = message;
+        msg.classList.toggle('is-ok', state === 'valid');
+        msg.classList.toggle('is-bad', state === 'invalid');
+      }
+    };
+
+    const validate = async () => {
+      const code = (input.value || '').trim();
+      if (!code) {
+        setState('', '');
+        return;
+      }
+      const id = ++reqId;
+      setState('loading', 'Checking…');
+      if (abort) abort.abort();
+      abort = new AbortController();
+      try {
+        const url = `${base}/api/validate-code.php?type=${encodeURIComponent(type)}&code=${encodeURIComponent(code)}`;
+        const res = await fetch(url, { credentials: 'same-origin', signal: abort.signal });
+        const data = await res.json();
+        if (id !== reqId) return;
+        if (data.valid) {
+          setState('valid', data.message || 'Valid');
+        } else {
+          setState('invalid', data.message || 'Invalid code');
+        }
+      } catch (err) {
+        if (err.name === 'AbortError' || id !== reqId) return;
+        setState('invalid', 'Could not verify code');
+      }
+    };
+
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const code = (input.value || '').trim();
+      if (!code) {
+        setState('', '');
+        return;
+      }
+      setState('loading', 'Checking…');
+      timer = setTimeout(validate, 450);
+    });
+
+    input.addEventListener('blur', () => {
+      clearTimeout(timer);
+      validate();
+    });
+
+    if ((input.value || '').trim()) {
+      validate();
+    }
+  };
 
   const base = (window.APP && window.APP.baseUrl) ? window.APP.baseUrl : '';
-  let timer = null;
-  let active = -1;
-  let items = [];
-  let abort = null;
+  document.querySelectorAll('[data-code-validate]').forEach(bindCodeValidate);
+
+  const countries = <?= json_encode(geo_countries(), JSON_UNESCAPED_UNICODE) ?>;
+
+  const escapeHtml = (s) => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
   const canAutofill = (el) => {
     if (!el) return false;
@@ -375,6 +570,185 @@ require ROOT_PATH . '/includes/header.php';
     if (!el) return;
     delete el.dataset.autofill;
   };
+
+  const createCombobox = ({ root, input, list, getItems, onSelect, remote = false }) => {
+    if (!root || !input || !list) return null;
+    let timer = null;
+    let active = -1;
+    let items = [];
+    let abort = null;
+
+    const hide = () => {
+      list.hidden = true;
+      list.innerHTML = '';
+      active = -1;
+      items = [];
+      input.setAttribute('aria-expanded', 'false');
+      root.classList.remove('is-open');
+    };
+
+    const render = () => {
+      if (!items.length) {
+        list.innerHTML = '<li class="address-suggest__item address-suggest__empty">No matches</li>';
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        root.classList.add('is-open');
+        return;
+      }
+      list.innerHTML = items.map((item, i) => `
+        <li role="option" data-i="${i}" class="address-suggest__item${i === active ? ' is-active' : ''}" aria-selected="${i === active ? 'true' : 'false'}">
+          ${escapeHtml(item.label)}
+        </li>
+      `).join('');
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      root.classList.add('is-open');
+    };
+
+    const load = async (q) => {
+      const query = (q || '').trim();
+      if (remote) {
+        if (abort) abort.abort();
+        abort = new AbortController();
+        try {
+          items = await getItems(query, abort.signal);
+          active = items.length ? 0 : -1;
+          render();
+        } catch (err) {
+          if (err.name !== 'AbortError') hide();
+        }
+        return;
+      }
+      items = getItems(query) || [];
+      active = items.length ? 0 : -1;
+      render();
+    };
+
+    const apply = (item) => {
+      if (!item) return;
+      onSelect(item);
+      hide();
+    };
+
+    input.addEventListener('focus', () => load(input.value));
+    input.addEventListener('input', () => {
+      markManual(input);
+      clearTimeout(timer);
+      timer = setTimeout(() => load(input.value), remote ? 280 : 0);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (list.hidden && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+        load(input.value);
+        return;
+      }
+      if (list.hidden || !items.length) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        active = (active + 1) % items.length;
+        render();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        active = (active - 1 + items.length) % items.length;
+        render();
+      } else if (e.key === 'Enter' && active >= 0) {
+        e.preventDefault();
+        apply(items[active]);
+      } else if (e.key === 'Escape') {
+        hide();
+      }
+    });
+
+    list.addEventListener('mousedown', (e) => {
+      const li = e.target.closest('[data-i]');
+      if (!li) return;
+      e.preventDefault();
+      apply(items[Number(li.dataset.i)]);
+    });
+
+    const toggle = root.querySelector('[data-place-toggle]');
+    if (toggle) {
+      toggle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        if (list.hidden) {
+          input.focus();
+          load(input.value);
+        } else {
+          hide();
+        }
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!root.contains(e.target)) hide();
+    });
+
+    return { hide, load, input };
+  };
+
+  const countryRoot = document.querySelector('[data-place-combobox="country"]');
+  const countryInput = document.getElementById('shipping_country');
+  const countryList = document.getElementById('country-suggest-list');
+  createCombobox({
+    root: countryRoot,
+    input: countryInput,
+    list: countryList,
+    getItems: (q) => {
+      const query = q.trim().toLowerCase();
+      const priority = ['GB', 'GH', 'US', 'NG', 'CA', 'IE', 'FR', 'DE', 'NL', 'AU', 'AE', 'ZA'];
+      let list = countries.filter((c) => !query || c.name.toLowerCase().includes(query) || c.code.toLowerCase().includes(query));
+      if (!query) {
+        const preferred = priority
+          .map((code) => countries.find((c) => c.code === code))
+          .filter(Boolean);
+        const rest = list.filter((c) => !priority.includes(c.code));
+        list = preferred.concat(rest);
+      }
+      return list.slice(0, 12).map((c) => ({ label: c.name, name: c.name, code: c.code }));
+    },
+    onSelect: (item) => {
+      countryInput.value = item.name;
+      markManual(countryInput);
+    },
+  });
+
+  const cityRoot = document.querySelector('[data-place-combobox="city"]');
+  const cityInput = document.getElementById('shipping_city');
+  const cityList = document.getElementById('city-suggest-list');
+  createCombobox({
+    root: cityRoot,
+    input: cityInput,
+    list: cityList,
+    remote: true,
+    getItems: async (q, signal) => {
+      const country = (countryInput && countryInput.value || '').trim();
+      const url = `${base}/api/city-suggest.php?q=${encodeURIComponent(q)}&country=${encodeURIComponent(country)}`;
+      const res = await fetch(url, { credentials: 'same-origin', signal });
+      const data = await res.json();
+      return Array.isArray(data.suggestions) ? data.suggestions : [];
+    },
+    onSelect: (item) => {
+      cityInput.value = item.city || item.label || '';
+      markManual(cityInput);
+      if (item.country && countryInput && canAutofill(countryInput)) {
+        countryInput.value = item.country;
+        countryInput.dataset.autofill = '1';
+      }
+    },
+  });
+
+  const wrap = document.querySelector('[data-address-autocomplete]');
+  const address = document.getElementById('shipping_address');
+  const city = document.getElementById('shipping_city');
+  const postcode = document.getElementById('shipping_postcode');
+  const country = document.getElementById('shipping_country');
+  const list = document.getElementById('address-suggest-list');
+  if (!wrap || !address || !list) return;
+
+  let timer = null;
+  let active = -1;
+  let items = [];
+  let abort = null;
 
   [city, postcode, country].forEach((el) => {
     if (!el) return;
@@ -421,12 +795,6 @@ require ROOT_PATH . '/includes/header.php';
     list.hidden = false;
     address.setAttribute('aria-expanded', 'true');
   };
-
-  const escapeHtml = (s) => String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 
   const search = async (q) => {
     if (abort) abort.abort();

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $pageTitle = 'Privacy Policy – Hair by Claudia Darlene';
 $pageDescription = 'How Hair by Claudia Darlene collects, uses, and protects your personal information.';
-$canonical = url('index.php?page=privacy-policy');
+$canonical = url('privacy');
 $policyHeading = 'Privacy Policy';
 $policyIntro = 'This privacy policy outlines how Hair by Claudia Darlene uses and protects any information that you provide when using this website.';
 

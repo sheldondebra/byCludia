@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $pageTitle = 'Terms and Conditions – Hair by Claudia Darlene';
 $pageDescription = 'Terms and conditions for using the Hair by Claudia Darlene website and services.';
-$canonical = url('index.php?page=terms');
+$canonical = url('terms');
 $policyHeading = 'Terms and Conditions';
 $policyIntro = 'Welcome to Hair by Claudia Darlene. These terms and conditions outline the rules and regulations for the use of our website and services. By accessing or using this website, you agree to comply with and be bound by these terms. If you do not agree with any part of these terms, please do not use our website.';
 

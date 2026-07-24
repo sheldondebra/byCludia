@@ -16,13 +16,17 @@ if (request_method() === 'POST' && verify_csrf(post('csrf_token'))) {
         $slug = trim((string) post('slug')) ?: slugify($name);
         $desc = trim((string) post('description'));
         $sort = (int) post('sort_order');
+        $seoTitle = mb_substr(trim((string) post('seo_title')), 0, 70);
+        $seoDescription = mb_substr(trim((string) post('seo_description')), 0, 320);
+        $focusKeyword = mb_substr(trim((string) post('focus_keyword')), 0, 80);
+        $introHtml = trim((string) post('intro_html'));
         if ($name !== '') {
             if ($id) {
-                db()->prepare('UPDATE categories SET name=?, slug=?, description=?, sort_order=? WHERE id=?')
-                    ->execute([$name, $slug, $desc, $sort, $id]);
+                db()->prepare('UPDATE categories SET name=?, slug=?, description=?, sort_order=?, seo_title=?, seo_description=?, focus_keyword=?, intro_html=? WHERE id=?')
+                    ->execute([$name, $slug, $desc, $sort, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $introHtml ?: null, $id]);
             } else {
-                db()->prepare('INSERT INTO categories (name, slug, description, sort_order) VALUES (?,?,?,?)')
-                    ->execute([$name, $slug, $desc, $sort]);
+                db()->prepare('INSERT INTO categories (name, slug, description, sort_order, seo_title, seo_description, focus_keyword, intro_html) VALUES (?,?,?,?,?,?,?,?)')
+                    ->execute([$name, $slug, $desc, $sort, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $introHtml ?: null]);
             }
             flash('success', 'Category saved.');
         } else {
@@ -71,6 +75,22 @@ require __DIR__ . '/_layout_top.php';
     <div>
       <label class="text-xs text-stone-500 mb-1 block">Description</label>
       <textarea name="description" rows="2" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]"><?= e($editing['description'] ?? '') ?></textarea>
+    </div>
+    <div>
+      <label class="text-xs text-stone-500 mb-1 block">SEO title</label>
+      <input name="seo_title" maxlength="70" value="<?= e($editing['seo_title'] ?? '') ?>" placeholder="Defaults to category name" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]">
+    </div>
+    <div>
+      <label class="text-xs text-stone-500 mb-1 block">Meta description</label>
+      <textarea name="seo_description" rows="2" maxlength="320" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]"><?= e($editing['seo_description'] ?? '') ?></textarea>
+    </div>
+    <div>
+      <label class="text-xs text-stone-500 mb-1 block">Focus keyword</label>
+      <input name="focus_keyword" maxlength="80" value="<?= e($editing['focus_keyword'] ?? '') ?>" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]">
+    </div>
+    <div>
+      <label class="text-xs text-stone-500 mb-1 block">Collection intro</label>
+      <textarea name="intro_html" rows="3" placeholder="Shown under the H1 on the shop category page" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]"><?= e($editing['intro_html'] ?? '') ?></textarea>
     </div>
     <div>
       <label class="text-xs text-stone-500 mb-1 block">Sort order</label>

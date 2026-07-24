@@ -80,6 +80,40 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const heroVideo = document.querySelector('[data-hero-video]');
+  if (heroVideo) {
+    const iframe = heroVideo.querySelector('iframe[data-src]');
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      heroVideo.remove();
+    } else if (iframe) {
+      // Portrait Vimeo source (~240×376) — size iframe to cover the hero
+      const VIDEO_ASPECT = 240 / 376;
+      const coverHeroVideo = () => {
+        const { width: cw, height: ch } = heroVideo.getBoundingClientRect();
+        if (!cw || !ch) return;
+        let w;
+        let h;
+        if (cw / ch > VIDEO_ASPECT) {
+          w = cw;
+          h = cw / VIDEO_ASPECT;
+        } else {
+          h = ch;
+          w = ch * VIDEO_ASPECT;
+        }
+        const pad = 1.08; // crop player chrome / rounding gaps
+        iframe.style.width = `${Math.ceil(w * pad)}px`;
+        iframe.style.height = `${Math.ceil(h * pad)}px`;
+      };
+
+      iframe.src = iframe.dataset.src;
+      coverHeroVideo();
+      window.addEventListener('resize', coverHeroVideo);
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(coverHeroVideo).observe(heroVideo);
+      }
+    }
+  }
+
   const menuBtn = document.getElementById('mobile-menu-btn');
   const menu = document.getElementById('mobile-menu');
   if (menuBtn && menu) {
@@ -106,18 +140,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (badge && typeof data.count !== 'undefined') badge.textContent = data.count;
     const totalEl = document.getElementById('cart-total');
     if (totalEl && data.subtotal) totalEl.textContent = data.subtotal;
+    const previewBody = document.getElementById('cart-preview-body');
+    if (previewBody && typeof data.preview_html === 'string') {
+      previewBody.innerHTML = data.preview_html;
+    }
   };
 
   document.querySelectorAll('[data-add-to-cart]').forEach((form) => {
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    const addToCart = async (buyNow = false) => {
       const fd = new FormData(form);
       fd.append('csrf_token', window.APP.csrf);
-      const btn = form.querySelector('button[type="submit"]');
-      if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Adding…';
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const buyBtn = form.querySelector('[data-product-buy-now]');
+      const activeBtn = buyNow ? buyBtn : submitBtn;
+      const idleLabel = buyNow ? 'Buy Now' : 'Add to Cart';
+      if (activeBtn) {
+        activeBtn.disabled = true;
+        activeBtn.textContent = buyNow ? 'Please wait…' : 'Adding…';
       }
+      if (submitBtn && buyNow) submitBtn.disabled = true;
+      if (buyBtn && !buyNow) buyBtn.disabled = true;
       try {
         const res = await fetch(`${window.APP.baseUrl}/api/cart.php`, {
           method: 'POST',
@@ -127,22 +169,50 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Could not add to cart');
         bumpCart(data);
+        if (buyNow) {
+          window.toast.success('Taking you to checkout…', { title: 'Cart' });
+          setTimeout(() => {
+            window.location = `${window.APP.baseUrl}/checkout`;
+          }, 350);
+          return;
+        }
         window.toast.success('Added to your bag', { title: 'Cart' });
-        if (btn) btn.textContent = 'Added ✓';
+        if (activeBtn) activeBtn.textContent = 'Added ✓';
         setTimeout(() => {
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Add to Cart';
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add to Cart';
+          }
+          if (buyBtn) {
+            buyBtn.disabled = false;
+            buyBtn.textContent = 'Buy Now';
           }
         }, 1200);
       } catch (err) {
         window.toast.error(err.message || 'Could not add to cart');
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = 'Add to Cart';
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Add to Cart';
+        }
+        if (buyBtn) {
+          buyBtn.disabled = false;
+          buyBtn.textContent = 'Buy Now';
         }
       }
+    };
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await addToCart(false);
     });
+
+    const buyNowBtn = form.querySelector('[data-product-buy-now]');
+    if (buyNowBtn) {
+      buyNowBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await addToCart(true);
+      });
+    }
   });
 
   const newsletter = document.getElementById('footer-newsletter');
@@ -176,22 +246,32 @@ document.addEventListener('DOMContentLoaded', () => {
     return data;
   };
 
+  const setBtnLabel = (btn, text) => {
+    const label = btn.querySelector('[data-btn-label]');
+    if (label) label.textContent = text;
+    else btn.textContent = text;
+  };
+  const getBtnLabel = (btn) => {
+    const label = btn.querySelector('[data-btn-label]');
+    return label ? label.textContent : btn.textContent;
+  };
+
   document.querySelectorAll('[data-quick-add]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const original = btn.textContent;
+      const original = getBtnLabel(btn);
       btn.disabled = true;
-      btn.textContent = 'Adding…';
+      setBtnLabel(btn, 'Adding…');
       try {
         await quickAdd(btn.getAttribute('data-quick-add'), btn.getAttribute('data-variant'));
         window.toast.success('Added to your bag', { title: 'Cart' });
-        btn.textContent = 'Added ✓';
-        setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 1200);
+        setBtnLabel(btn, 'Added ✓');
+        setTimeout(() => { btn.disabled = false; setBtnLabel(btn, original); }, 1200);
       } catch (err) {
         window.toast.error(err.message || 'Could not add to cart');
         btn.disabled = false;
-        btn.textContent = original;
+        setBtnLabel(btn, original);
       }
     });
   });
@@ -200,18 +280,19 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      const original = getBtnLabel(btn) || 'Buy Now';
       btn.disabled = true;
-      btn.textContent = 'Please wait…';
+      setBtnLabel(btn, 'Please wait…');
       try {
         await quickAdd(btn.getAttribute('data-buy-now'), btn.getAttribute('data-variant'));
         window.toast.success('Taking you to checkout…', { title: 'Cart' });
         setTimeout(() => {
-          window.location = `${window.APP.baseUrl}/index.php?page=cart`;
+          window.location = `${window.APP.baseUrl}/checkout`;
         }, 450);
       } catch (err) {
         window.toast.error(err.message || 'Could not add to cart');
         btn.disabled = false;
-        btn.textContent = 'Buy Now';
+        setBtnLabel(btn, original);
       }
     });
   });
@@ -229,16 +310,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.login_required) {
           window.toast.info('Sign in to save favourites', { title: 'Wishlist' });
           setTimeout(() => {
-            window.location = `${window.APP.baseUrl}/index.php?page=login`;
+            window.location = `${window.APP.baseUrl}/login`;
           }, 700);
           return;
         }
         if (!data.ok) throw new Error(data.error || 'Could not update favourites');
         const svg = btn.querySelector('svg');
+        const label = btn.querySelector('[data-wishlist-label]');
         btn.setAttribute('aria-pressed', data.active ? 'true' : 'false');
         btn.classList.toggle('text-rose-500', data.active);
+        btn.classList.toggle('border-rose-200', data.active);
         btn.classList.toggle('text-brand-ink', !data.active);
         if (svg) svg.setAttribute('fill', data.active ? 'currentColor' : 'none');
+        if (label) label.textContent = data.active ? 'Wishlisted' : 'Wishlist';
+        btn.title = data.active ? 'Remove from wishlist' : 'Add to wishlist';
         const wlBadge = document.getElementById('wishlist-count');
         if (wlBadge && typeof data.count === 'number') {
           wlBadge.textContent = data.count;
@@ -272,10 +357,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('[data-compare-toggle]').forEach((btn) => {
       const id = Number(btn.getAttribute('data-compare-toggle'));
       const active = ids.includes(id);
+      const label = btn.querySelector('[data-compare-label]');
       btn.classList.toggle('bg-brand-ink', active);
       btn.classList.toggle('text-white', active);
       btn.classList.toggle('bg-white/90', !active);
+      btn.classList.toggle('border-brand-ink', active);
       btn.title = active ? 'Remove from compare' : 'Add to compare';
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      if (label) label.textContent = active ? 'In compare' : 'Compare';
     });
   };
 
@@ -369,4 +458,208 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Auth email / phone toggle
+  document.querySelectorAll('[data-auth-form]').forEach((root) => {
+    const modeInput = root.querySelector('[data-auth-mode-input]');
+    const buttons = root.querySelectorAll('[data-auth-mode]');
+    const panels = {
+      email: root.querySelector('[data-auth-panel="email"]'),
+      phone: root.querySelector('[data-auth-panel="phone"]'),
+    };
+
+    const setMode = (mode) => {
+      const next = mode === 'phone' ? 'phone' : 'email';
+      if (modeInput) modeInput.value = next;
+      buttons.forEach((btn) => {
+        const active = btn.getAttribute('data-auth-mode') === next;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      Object.entries(panels).forEach(([key, panel]) => {
+        if (!panel) return;
+        const show = key === next;
+        panel.hidden = !show;
+        const input = panel.querySelector('input');
+        if (input) {
+          if (show) input.setAttribute('required', 'required');
+          else input.removeAttribute('required');
+        }
+      });
+      const focusEl = panels[next]?.querySelector('input');
+      if (focusEl && document.activeElement?.hasAttribute?.('data-auth-mode')) {
+        focusEl.focus();
+      }
+    };
+
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => setMode(btn.getAttribute('data-auth-mode')));
+    });
+  });
+
+  // Password show / hide
+  document.querySelectorAll('[data-password-toggle]').forEach((btn) => {
+    const wrap = btn.closest('.password-field');
+    const input = wrap?.querySelector('[data-password-input], input[type="password"], input[type="text"]');
+    if (!wrap || !input) return;
+
+    btn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      wrap.classList.toggle('is-visible', show);
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+  });
+
+  // Password strength + confirm match
+  const strengthSource = document.querySelector('[data-password-strength-source]');
+  const strengthBox = document.querySelector('[data-password-strength]');
+  const strengthLabel = document.querySelector('[data-password-strength-label]');
+  const confirmInput = document.querySelector('[data-password-confirm]');
+  const matchMsg = document.querySelector('[data-password-match-msg]');
+
+  const scorePassword = (value) => {
+    let score = 0;
+    if (value.length >= 8) score += 1;
+    if (value.length >= 12) score += 1;
+    if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
+    if (/\d/.test(value)) score += 1;
+    if (/[^A-Za-z0-9]/.test(value)) score += 1;
+
+    if (score <= 1) return { level: 'weak', label: 'Weak — add length and variety' };
+    if (score === 2) return { level: 'fair', label: 'Fair — getting better' };
+    if (score === 3) return { level: 'good', label: 'Good — almost there' };
+    return { level: 'strong', label: 'Strong password' };
+  };
+
+  const updateStrength = () => {
+    if (!strengthSource || !strengthBox || !strengthLabel) return;
+    const value = strengthSource.value || '';
+    if (!value) {
+      strengthBox.hidden = true;
+      strengthBox.removeAttribute('data-level');
+      strengthLabel.textContent = '';
+      return;
+    }
+    const result = scorePassword(value);
+    strengthBox.hidden = false;
+    strengthBox.setAttribute('data-level', result.level);
+    strengthLabel.textContent = result.label;
+  };
+
+  const updateMatch = () => {
+    if (!strengthSource || !confirmInput || !matchMsg) return;
+    const confirmValue = confirmInput.value || '';
+    if (!confirmValue) {
+      matchMsg.hidden = true;
+      confirmInput.setCustomValidity('');
+      return;
+    }
+    const matches = strengthSource.value === confirmValue;
+    matchMsg.hidden = matches;
+    confirmInput.setCustomValidity(matches ? '' : 'Passwords do not match');
+  };
+
+  if (strengthSource) {
+    strengthSource.addEventListener('input', () => {
+      updateStrength();
+      updateMatch();
+    });
+    updateStrength();
+  }
+  if (confirmInput) {
+    confirmInput.addEventListener('input', updateMatch);
+  }
+
+  // Account tabs + expandable orders
+  const accountTabs = document.querySelector('[data-account-tabs]');
+  if (accountTabs) {
+    const tabButtons = accountTabs.querySelectorAll('[data-account-tab]');
+    const panels = accountTabs.querySelectorAll('[data-account-panel]');
+
+    const activateTab = (name) => {
+      tabButtons.forEach((btn) => {
+        const active = btn.getAttribute('data-account-tab') === name;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      panels.forEach((panel) => {
+        const active = panel.getAttribute('data-account-panel') === name;
+        panel.classList.toggle('is-active', active);
+        panel.hidden = !active;
+      });
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', name);
+      window.history.replaceState({}, '', url);
+    };
+
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => activateTab(btn.getAttribute('data-account-tab')));
+    });
+  }
+
+  document.querySelectorAll('[data-account-order]').forEach((order) => {
+    const toggle = order.querySelector('[data-account-order-toggle]');
+    const details = order.querySelector('.account-order__details');
+    if (!toggle || !details) return;
+
+    toggle.addEventListener('click', () => {
+      const open = !order.classList.contains('is-open');
+      order.classList.toggle('is-open', open);
+      details.hidden = !open;
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+  });
+
+  // Product card gallery: slide through images on hover when multiple exist
+  document.querySelectorAll('[data-card-slider]').forEach((card) => {
+    const slides = Array.from(card.querySelectorAll('.product-card__slide'));
+    const dots = Array.from(card.querySelectorAll('.product-card__dot'));
+    if (slides.length < 2) return;
+
+    let index = 0;
+    let timer = null;
+    const intervalMs = 1100;
+
+    const show = (next) => {
+      const prev = index;
+      index = (next + slides.length) % slides.length;
+      if (prev === index) return;
+      slides[prev].classList.remove('is-active');
+      slides[prev].classList.add('is-exit');
+      slides[index].classList.add('is-active');
+      slides[index].classList.remove('is-exit');
+      window.setTimeout(() => slides[prev].classList.remove('is-exit'), 480);
+      dots.forEach((dot, i) => dot.classList.toggle('is-active', i === index));
+    };
+
+    const start = () => {
+      if (timer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      timer = window.setInterval(() => show(index + 1), intervalMs);
+    };
+
+    const stop = () => {
+      if (timer) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+      // Reset to primary image when hover ends
+      if (index !== 0) {
+        slides.forEach((s, i) => {
+          s.classList.toggle('is-active', i === 0);
+          s.classList.remove('is-exit');
+        });
+        dots.forEach((dot, i) => dot.classList.toggle('is-active', i === 0));
+        index = 0;
+      }
+    };
+
+    card.addEventListener('mouseenter', start);
+    card.addEventListener('mouseleave', stop);
+    card.addEventListener('focusin', start);
+    card.addEventListener('focusout', (e) => {
+      if (!card.contains(e.relatedTarget)) stop();
+    });
+  });
 });

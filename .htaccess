@@ -1,19 +1,48 @@
 RewriteEngine On
-
-ErrorDocument 404 /index.php?page=404
+RewriteBase /
 
 # SEO endpoints
 RewriteRule ^sitemap\.xml$ sitemap.php [L]
 RewriteRule ^robots\.txt$ robots.php [L]
 
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+# Skip real files and directories
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Dynamic routes
 RewriteRule ^product/([a-z0-9\-]+)/?$ index.php?page=product&slug=$1 [L,QSA]
 RewriteRule ^blog/([a-z0-9\-]+)/?$ index.php?page=blog-post&slug=$1 [L,QSA]
-RewriteRule ^blog/?$ index.php?page=blog [L,QSA]
+RewriteRule ^wishlist/share/([a-f0-9]+)/?$ index.php?page=wishlist-shared&token=$1 [L,QSA]
+
+# Static pretty routes
+RewriteRule ^$ index.php?page=home [L,QSA]
+RewriteRule ^home/?$ index.php?page=home [L,QSA]
 RewriteRule ^shop/?$ index.php?page=shop [L,QSA]
+RewriteRule ^cart/?$ index.php?page=cart [L,QSA]
+RewriteRule ^checkout/?$ index.php?page=checkout [L,QSA]
 RewriteRule ^about/?$ index.php?page=about [L,QSA]
 RewriteRule ^faq/?$ index.php?page=faq [L,QSA]
 RewriteRule ^contact/?$ index.php?page=contact [L,QSA]
-RewriteRule ^cart/?$ index.php?page=cart [L,QSA]
-RewriteRule ^checkout/?$ index.php?page=checkout [L,QSA]
+RewriteRule ^login/?$ index.php?page=login [L,QSA]
+RewriteRule ^register/?$ index.php?page=register [L,QSA]
+RewriteRule ^logout/?$ index.php?page=logout [L,QSA]
+RewriteRule ^account/?$ index.php?page=account [L,QSA]
+RewriteRule ^order-success/?$ index.php?page=order-success [L,QSA]
+RewriteRule ^wishlist/?$ index.php?page=wishlist [L,QSA]
+RewriteRule ^blog/?$ index.php?page=blog [L,QSA]
+RewriteRule ^compare/?$ index.php?page=compare [L,QSA]
+RewriteRule ^checkout-return/?$ index.php?page=checkout-return [L,QSA]
+RewriteRule ^gift-cards/?$ index.php?page=gift-cards [L,QSA]
+RewriteRule ^track/?$ index.php?page=track [L,QSA]
+RewriteRule ^unsubscribe/?$ index.php?page=unsubscribe [L,QSA]
+RewriteRule ^returns/?$ index.php?page=returns-policy [L,QSA]
+RewriteRule ^returns-policy/?$ index.php?page=returns-policy [L,QSA]
+RewriteRule ^privacy/?$ index.php?page=privacy-policy [L,QSA]
+RewriteRule ^privacy-policy/?$ index.php?page=privacy-policy [L,QSA]
+RewriteRule ^shipping/?$ index.php?page=shipping-policy [L,QSA]
+RewriteRule ^shipping-policy/?$ index.php?page=shipping-policy [L,QSA]
+RewriteRule ^terms/?$ index.php?page=terms [L,QSA]
+
+# Everything else → 404 via front controller
+RewriteRule ^ index.php?page=404 [L,QSA]

@@ -20,9 +20,9 @@ ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 INSERT INTO settings (setting_key, setting_value) VALUES
 ('promo_banner', 'Worldwide Shipping Available | UK/EU: Klarna & Clearpay | Use code SUMMER10 for 10% OFF'),
-('hero_title', 'The Color Edit'),
-('hero_subtitle', 'Reflect your inner beauty through everyday color.'),
-('about_blurb', 'We ensure our hair products are ethically sourced. We create high-quality hair that sets trends. We provide premium hair for the beauty industry.'),
+('hero_title', 'Luxury Textured Hair'),
+('hero_subtitle', 'Designed to blend seamlessly with your natural hair.'),
+('about_blurb', 'At By Claudia Darlene, we believe textured hair should be celebrated, not compromised. Our 100% virgin human hair extensions are carefully sourced and crafted to blend seamlessly with natural textures, from silky straight to 4C coils. Every collection is designed with quality, longevity, and effortless beauty in mind, so you can wear your hair with confidence every day.'),
 ('shipping_flat', '15.00'),
 ('contact_phone', '+44 7342 590296'),
 ('contact_email', 'info@byclaudiadarlene.com')
@@ -47,11 +47,8 @@ INSERT INTO products (category_id, name, slug, short_description, description, b
 (2, 'The Siren Curly Bundles 3a-3b', 'the-siren-curly-bundles', 'Soft 3a–3b curls with bounce and shine.', 'The Siren Curly Bundles — defined 3a–3b curls that hold shape wash after wash.', 195.00, NULL, 'assets/images/products/siren-curly.jpg', 1, 0, 5.00, 0),
 (4, 'Professional Hair Color Add-On', 'professional-hair-color-add-on', 'Custom professional coloring for any texture.', 'Add professional color to your order. Custom shades for every texture story.', 35.00, NULL, 'assets/images/products/color-addon.jpg', 1, 0, 5.00, 0);
 
--- Blog articles
-INSERT INTO blog_posts (title, slug, excerpt, body, is_published, published_at) VALUES
-('Choosing the Right Texture for Your Natural Hair', 'choosing-the-right-texture', 'From 3a curls to 4c coils — how to match extensions to your natural pattern for a seamless blend.', '<p>Finding the right texture is the difference between hair that blends effortlessly and hair that never quite sits right. Start by identifying your natural curl pattern — this is your anchor.</p><p>Our <strong>Afro Kinky Curly</strong> and <strong>Coily</strong> textures are designed to melt into 4b–4c hair, while the <strong>Siren Curly</strong> range suits softer 3a–3b patterns. When in doubt, size up slightly in coil definition; a fuller texture blends down more gracefully than a looser one blends up.</p><p>Consider your styling routine too. If you wear wash-and-go looks, match texture precisely. If you blow out or straighten often, a versatile kinky-straight weft gives you the most range.</p>', 1, '2026-06-20 09:00:00'),
-('How to Care for Your Kinky Curly Bundles', 'caring-for-kinky-curly-bundles', 'A simple weekly ritual to keep curls soft, defined, and shedding-free wash after wash.', '<p>Great hair is maintained, not just installed. Treat your bundles like your own hair and they will reward you with months of wear.</p><p><strong>Cleanse gently.</strong> Use a sulfate-free shampoo every 1–2 weeks, working from root to tip in the direction of the hair to avoid tangling. <strong>Condition deeply.</strong> Follow with a hydrating mask, then detangle with your fingers and a wide-tooth comb.</p><p><strong>Refresh daily.</strong> A light water-and-leave-in mist revives curls each morning. At night, protect with a satin bonnet to prevent friction and dryness. Avoid heavy oils at the root — they weigh curls down and attract buildup.</p>', 1, '2026-06-27 09:00:00'),
-('The Color Edit: Custom Coloring for Every Story', 'the-color-edit-custom-coloring', 'Why we color before you install — and how to choose a shade that reflects your inner beauty.', '<p>Color is personal. Our professional color add-on lets you customise any texture before it ever reaches your head, so the tone is even, rich, and ready to wear.</p><p>We recommend choosing a shade one level warmer than your goal — hair reads slightly cooler under natural light. For dimensional looks, ask about subtle money-piece framing around the face; it brightens instantly without a full color commitment.</p><p>Every color order is conditioned and sealed to protect the cuticle, so your investment stays soft and vibrant far longer.</p>', 1, '2026-07-04 09:00:00');
+-- Blog articles are seeded automatically via includes/db.php → seed_blog_posts()
+-- (7 SEO posts: wash/care/night routines + texture, bundles, units, install guides)
 
 -- Variants (length options) for each product
 INSERT INTO product_variants (product_id, sku, label, option_length, price, stock)
