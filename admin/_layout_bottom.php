@@ -1,7 +1,7 @@
       </main>
 
       <!-- Footer -->
-      <footer class="mt-auto border-t border-stone-200/80 bg-white/60">
+      <footer class="border-t border-stone-200/80 bg-white/60">
         <div class="px-6 sm:px-10 py-4 flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3 min-w-0">
             <span class="w-9 h-9 rounded-full bg-stone-900 text-[#F3C4C4] font-semibold text-xs flex items-center justify-center shrink-0"><?= e($adminInitials) ?></span>

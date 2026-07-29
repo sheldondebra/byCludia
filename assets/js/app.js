@@ -307,13 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const res = await fetch(`${window.APP.baseUrl}/api/wishlist.php`, { method: 'POST', body: fd, credentials: 'same-origin' });
         const data = await res.json();
-        if (data.login_required) {
-          window.toast.info('Sign in to save favourites', { title: 'Wishlist' });
-          setTimeout(() => {
-            window.location = `${window.APP.baseUrl}/login`;
-          }, 700);
-          return;
-        }
         if (!data.ok) throw new Error(data.error || 'Could not update favourites');
         const svg = btn.querySelector('svg');
         const label = btn.querySelector('[data-wishlist-label]');
@@ -610,6 +603,80 @@ document.addEventListener('DOMContentLoaded', () => {
       details.hidden = !open;
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
+  });
+
+  // Lookbook: slow auto-scroll + arrow controls
+  document.querySelectorAll('[data-lookbook]').forEach((root) => {
+    const rail = root.querySelector('[data-lookbook-rail]');
+    const prev = root.querySelector('[data-lookbook-prev]');
+    const next = root.querySelector('[data-lookbook-next]');
+    if (!rail) return;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const speed = 0.35; // px per frame — slow crawl
+    let paused = false;
+    let resumeTimer = null;
+    let raf = 0;
+
+    const maxScroll = () => Math.max(0, rail.scrollWidth - rail.clientWidth);
+
+    const syncArrows = () => {
+      const max = maxScroll();
+      const atStart = rail.scrollLeft <= 2;
+      const atEnd = rail.scrollLeft >= max - 2;
+      if (prev) prev.disabled = atStart;
+      if (next) next.disabled = atEnd || max <= 0;
+    };
+
+    const pauseTemporarily = (ms = 2800) => {
+      paused = true;
+      if (resumeTimer) window.clearTimeout(resumeTimer);
+      resumeTimer = window.setTimeout(() => {
+        paused = false;
+      }, ms);
+    };
+
+    const step = (amount) => {
+      rail.scrollBy({ left: amount, behavior: 'smooth' });
+      pauseTemporarily();
+    };
+
+    if (prev) prev.addEventListener('click', () => step(-Math.max(220, rail.clientWidth * 0.7)));
+    if (next) next.addEventListener('click', () => step(Math.max(220, rail.clientWidth * 0.7)));
+
+    root.addEventListener('mouseenter', () => { paused = true; });
+    root.addEventListener('mouseleave', () => { paused = false; });
+    root.addEventListener('focusin', () => { paused = true; });
+    root.addEventListener('focusout', (e) => {
+      if (!root.contains(e.relatedTarget)) paused = false;
+    });
+
+    rail.addEventListener('pointerdown', () => pauseTemporarily(4000));
+    rail.addEventListener('wheel', () => pauseTemporarily(4000), { passive: true });
+    rail.addEventListener('scroll', syncArrows, { passive: true });
+    window.addEventListener('resize', syncArrows);
+
+    const tick = () => {
+      if (!reduceMotion && !paused && maxScroll() > 0) {
+        const max = maxScroll();
+        if (rail.scrollLeft >= max - 0.5) {
+          rail.scrollLeft = 0;
+        } else {
+          rail.scrollLeft += speed;
+        }
+      }
+      syncArrows();
+      raf = window.requestAnimationFrame(tick);
+    };
+
+    syncArrows();
+    if (!reduceMotion) raf = window.requestAnimationFrame(tick);
+
+    // Cleanup if needed when navigating away in SPA-like contexts
+    root.addEventListener('lookbook:destroy', () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      if (resumeTimer) window.clearTimeout(resumeTimer);
+    }, { once: true });
   });
 
   // Product card gallery: slide through images on hover when multiple exist

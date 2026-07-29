@@ -305,29 +305,15 @@ function admin_icon(string $name, string $classes = 'w-4 h-4'): string
  */
 function shipping_methods(): array
 {
-    $methods = [];
-    if (setting('ship_dhl_enabled', '0') === '1') {
-        $methods['dhl'] = [
-            'label' => (string) (setting('ship_dhl_label', 'DHL Express') ?: 'DHL Express'),
-            'rate' => (float) (setting('ship_dhl_rate', '0') ?: 0),
-            'carrier' => 'dhl',
-        ];
-    }
-    if (setting('ship_fedex_enabled', '0') === '1') {
-        $methods['fedex'] = [
-            'label' => (string) (setting('ship_fedex_label', 'FedEx International') ?: 'FedEx International'),
-            'rate' => (float) (setting('ship_fedex_rate', '0') ?: 0),
-            'carrier' => 'fedex',
-        ];
-    }
-    if (!$methods) {
-        $methods['standard'] = [
-            'label' => 'Standard shipping',
-            'rate' => (float) (setting('shipping_flat', '15') ?: 15),
+    // Checkout pricing uses country overrides via shipping_rate_for_country().
+    // This helper remains for any legacy callers and always exposes the default rate.
+    return [
+        'standard' => [
+            'label' => 'Shipping',
+            'rate' => shipping_default_rate(),
             'carrier' => 'standard',
-        ];
-    }
-    return $methods;
+        ],
+    ];
 }
 
 /** Human label for a stored carrier code. */

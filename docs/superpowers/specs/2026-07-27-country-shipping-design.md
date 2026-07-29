@@ -1,7 +1,7 @@
 # Flexible Country Shipping — Design Spec
 
 **Date:** 2026-07-27  
-**Status:** Approved — awaiting implementation plan  
+**Status:** Implemented  
 **Approach:** One shipping price per country (Approach A) + ISO dropdown with Other (C) + free shipping zeroes all rates (A)
 
 ## Goal

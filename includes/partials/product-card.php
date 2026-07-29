@@ -8,12 +8,7 @@ $cardVariantStmt->execute([(int) $product['id']]);
 $cardVariant = $cardVariantStmt->fetch();
 $cardVariantId = (int) ($cardVariant['id'] ?? 0);
 
-$isFav = false;
-if ($cardUser = current_user()) {
-    $favStmt = db()->prepare('SELECT 1 FROM wishlists WHERE user_id = ? AND product_id = ?');
-    $favStmt->execute([(int) $cardUser['id'], (int) $product['id']]);
-    $isFav = (bool) $favStmt->fetchColumn();
-}
+$isFav = wishlist_has((int) $product['id']);
 $productUrl = url('product/' . $product['slug']);
 $cardAlt = seo_product_alt($product);
 
@@ -34,6 +29,9 @@ if (!empty($product['gallery'])) {
 }
 $slideCount = count($cardSlides);
 $canSlide = $slideCount > 1;
+$isOnSale = !empty($product['on_sale']);
+$isNew = !empty($product['is_new']);
+$badgeBase = 'text-[10px] tracking-[0.14em] uppercase text-white px-2.5 py-1 rounded-full';
 ?>
 <div class="product-card reveal group relative block" <?= $canSlide ? 'data-card-slider' : '' ?>>
   <button type="button"
@@ -53,8 +51,15 @@ $canSlide = $slideCount > 1;
   </button>
 
   <div class="relative aspect-[4/5] rounded-2xl overflow-hidden bg-white mb-4 shadow-soft/50">
-    <?php if (!empty($product['on_sale'])): ?>
-      <span class="absolute top-3 left-14 z-10 text-[10px] tracking-[0.14em] uppercase bg-brand-ink text-white px-2.5 py-1 rounded-full">Sale</span>
+    <?php if ($isNew || $isOnSale): ?>
+      <div class="absolute top-3 left-14 z-10 flex flex-col gap-1.5 items-start">
+        <?php if ($isNew): ?>
+          <span class="<?= $badgeBase ?> bg-brand-ink">New</span>
+        <?php endif; ?>
+        <?php if ($isOnSale): ?>
+          <span class="<?= $badgeBase ?> bg-red-600">Sale</span>
+        <?php endif; ?>
+      </div>
     <?php endif; ?>
     <a href="<?= e($productUrl) ?>" class="product-card__media block w-full h-full relative">
       <?php if ($slideCount > 0): ?>

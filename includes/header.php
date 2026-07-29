@@ -17,12 +17,7 @@ $pageJsonLd = $jsonLd ?? null;
 $user = current_user();
 $cartCount = cart_count();
 $cartTotal = money(cart_subtotal_gbp());
-$wishlistCount = 0;
-if ($user) {
-    $wlStmt = db()->prepare('SELECT COUNT(*) FROM wishlists WHERE user_id = ?');
-    $wlStmt->execute([(int) $user['id']]);
-    $wishlistCount = (int) $wlStmt->fetchColumn();
-}
+$wishlistCount = wishlist_count();
 $currencies = currency_rates();
 $activeCurrency = current_currency();
 $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearpay | Checkout in your currency');
@@ -111,7 +106,7 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
 
   <header class="site-header sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16 sm:h-20 gap-4">
+      <div class="flex items-center justify-between h-20 sm:h-24 gap-4">
         <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-[12px] tracking-[0.18em] uppercase">
           <a class="nav-link <?= active_nav('home') ?>" href="<?= e(url('index.php?page=home')) ?>">Home</a>
           <a class="nav-link <?= active_nav('shop') ?>" href="<?= e(url('index.php?page=shop')) ?>">Our Collection</a>
@@ -124,8 +119,8 @@ $promo = setting('promo_banner', 'Worldwide Shipping Available | Klarna & Clearp
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
 
-        <a href="<?= e(url('index.php?page=home')) ?>" class="absolute left-1/2 -translate-x-1/2 text-center brand-mark transition-transform duration-300 hover:scale-[1.03]">
-          <img src="<?= e(asset($logoPath)) ?>" alt="<?= e(setting('store_name', 'By Claudia Darlene')) ?>" class="h-12 sm:h-14 w-auto object-contain">
+        <a href="<?= e(url('index.php?page=home')) ?>" class="absolute left-1/2 -translate-x-1/2 text-center brand-mark py-2 px-4 sm:px-6 transition-transform duration-300 hover:scale-[1.03]">
+          <img src="<?= e(asset($logoPath)) ?>" alt="<?= e(setting('store_name', 'By Claudia Darlene')) ?>" class="h-14 sm:h-16 w-auto object-contain">
         </a>
 
         <div class="flex items-center gap-0.5 sm:gap-1 ml-auto">

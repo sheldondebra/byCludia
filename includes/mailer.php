@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * Lightweight SMTP mailer (no external dependencies).
- * Configured via admin Integrations settings.
+ * Uses admin Integrations settings, with fallbacks from config.php mail block.
  */
 
 function mailer_last_error(?string $set = null): string
@@ -17,7 +17,72 @@ function mailer_last_error(?string $set = null): string
 
 function mailer_enabled(): bool
 {
-    return setting('mail_enabled', '0') === '1';
+    $flag = setting('mail_enabled', null);
+    if ($flag !== null && $flag !== '') {
+        return $flag === '1';
+    }
+    global $config;
+    return !empty($config['mail']['enabled']);
+}
+
+/**
+ * Resolve SMTP / from settings: DB settings first, then config.php fallbacks.
+ *
+ * @return array{host:string,port:int,user:string,pass:string,secure:string,from:string,from_name:string}
+ */
+function mailer_config(): array
+{
+    global $config;
+    $mail = is_array($config['mail'] ?? null) ? $config['mail'] : [];
+
+    $host = (string) (setting('smtp_host', '') ?: ($mail['smtp_host'] ?? ''));
+    $port = (string) (setting('smtp_port', '') ?: ($mail['smtp_port'] ?? '587'));
+    $user = (string) (setting('smtp_user', '') ?: ($mail['smtp_user'] ?? ''));
+    $pass = (string) (setting('smtp_pass', '') ?: ($mail['smtp_pass'] ?? ''));
+    $secure = (string) (setting('smtp_secure', '') ?: ($mail['smtp_secure'] ?? 'tls') ?: 'tls');
+    $from = (string) (setting('mail_from', '') ?: ($mail['from'] ?? '') ?: $user ?: 'no-reply@localhost');
+    $fromName = (string) (setting('mail_from_name', '') ?: ($mail['from_name'] ?? '') ?: setting('store_name', 'By Claudia Darlene'));
+
+    return [
+        'host' => $host,
+        'port' => (int) ($port ?: 587),
+        'user' => $user,
+        'pass' => $pass,
+        'secure' => $secure,
+        'from' => $from,
+        'from_name' => $fromName,
+    ];
+}
+
+/** Sync config.php mail credentials into settings (so Admin → Integrations shows them). */
+function mailer_sync_settings_from_config(bool $overwrite = false): void
+{
+    global $config;
+    $mail = is_array($config['mail'] ?? null) ? $config['mail'] : [];
+    if ($mail === []) {
+        return;
+    }
+
+    $pairs = [
+        'mail_enabled' => !empty($mail['enabled']) ? '1' : '0',
+        'smtp_host' => (string) ($mail['smtp_host'] ?? ''),
+        'smtp_port' => (string) ($mail['smtp_port'] ?? '465'),
+        'smtp_secure' => (string) ($mail['smtp_secure'] ?? 'ssl'),
+        'smtp_user' => (string) ($mail['smtp_user'] ?? ''),
+        'smtp_pass' => (string) ($mail['smtp_pass'] ?? ''),
+        'mail_from' => (string) ($mail['from'] ?? ($mail['smtp_user'] ?? '')),
+        'mail_from_name' => (string) ($mail['from_name'] ?? 'Hair by Claudia Darlene'),
+    ];
+
+    foreach ($pairs as $key => $value) {
+        if ($value === '' && $key !== 'mail_enabled') {
+            continue;
+        }
+        $existing = setting($key, null);
+        if ($overwrite || $existing === null || $existing === '') {
+            set_setting($key, $value);
+        }
+    }
 }
 
 /** Read an SMTP reply (handles multi-line) and check for an expected code. */
@@ -26,7 +91,6 @@ function smtp_read($conn, string $expected): bool
     $data = '';
     while (($line = fgets($conn, 515)) !== false) {
         $data .= $line;
-        // Lines like "250-..." continue; "250 ..." ends.
         if (isset($line[3]) && $line[3] === ' ') {
             break;
         }
@@ -54,19 +118,19 @@ function send_mail(string $to, string $subject, string $htmlBody, string $textBo
         return false;
     }
 
-    $host = (string) setting('smtp_host', '');
-    $port = (int) (setting('smtp_port', '587') ?: 587);
-    $user = (string) setting('smtp_user', '');
-    $pass = (string) setting('smtp_pass', '');
-    $secure = (string) setting('smtp_secure', 'tls'); // none|tls|ssl
-    $fromEmail = (string) setting('mail_from', $user ?: 'no-reply@localhost');
-    $fromName = (string) setting('mail_from_name', setting('store_name', 'By Claudia Darlene'));
+    $cfg = mailer_config();
+    $host = $cfg['host'];
+    $port = $cfg['port'];
+    $user = $cfg['user'];
+    $pass = $cfg['pass'];
+    $secure = $cfg['secure'];
+    $fromEmail = $cfg['from'];
+    $fromName = $cfg['from_name'];
 
     if ($textBody === '') {
         $textBody = trim(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>'], "\n", $htmlBody)));
     }
 
-    // Fallback to PHP mail() when no SMTP host is configured.
     if ($host === '') {
         $headers = 'From: ' . $fromName . ' <' . $fromEmail . ">\r\n"
             . "MIME-Version: 1.0\r\n"
@@ -88,28 +152,48 @@ function send_mail(string $to, string $subject, string $htmlBody, string $textBo
     stream_set_timeout($conn, 15);
 
     try {
-        if (!smtp_read($conn, '220')) return false;
+        if (!smtp_read($conn, '220')) {
+            return false;
+        }
         $ehloHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        if (!smtp_cmd($conn, 'EHLO ' . $ehloHost, '250')) return false;
+        if (!smtp_cmd($conn, 'EHLO ' . $ehloHost, '250')) {
+            return false;
+        }
 
         if ($secure === 'tls') {
-            if (!smtp_cmd($conn, 'STARTTLS', '220')) return false;
+            if (!smtp_cmd($conn, 'STARTTLS', '220')) {
+                return false;
+            }
             if (!stream_socket_enable_crypto($conn, true, STREAM_CRYPTO_METHOD_TLS_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_1_CLIENT | STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
                 mailer_last_error('Failed to start TLS.');
                 return false;
             }
-            if (!smtp_cmd($conn, 'EHLO ' . $ehloHost, '250')) return false;
+            if (!smtp_cmd($conn, 'EHLO ' . $ehloHost, '250')) {
+                return false;
+            }
         }
 
         if ($user !== '') {
-            if (!smtp_cmd($conn, 'AUTH LOGIN', '334')) return false;
-            if (!smtp_cmd($conn, base64_encode($user), '334')) return false;
-            if (!smtp_cmd($conn, base64_encode($pass), '235')) return false;
+            if (!smtp_cmd($conn, 'AUTH LOGIN', '334')) {
+                return false;
+            }
+            if (!smtp_cmd($conn, base64_encode($user), '334')) {
+                return false;
+            }
+            if (!smtp_cmd($conn, base64_encode($pass), '235')) {
+                return false;
+            }
         }
 
-        if (!smtp_cmd($conn, 'MAIL FROM:<' . $fromEmail . '>', '250')) return false;
-        if (!smtp_cmd($conn, 'RCPT TO:<' . $to . '>', '250')) return false;
-        if (!smtp_cmd($conn, 'DATA', '354')) return false;
+        if (!smtp_cmd($conn, 'MAIL FROM:<' . $fromEmail . '>', '250')) {
+            return false;
+        }
+        if (!smtp_cmd($conn, 'RCPT TO:<' . $to . '>', '250')) {
+            return false;
+        }
+        if (!smtp_cmd($conn, 'DATA', '354')) {
+            return false;
+        }
 
         $boundary = 'bcd_' . bin2hex(random_bytes(8));
         $headers = 'From: ' . mailer_encode_header($fromName) . ' <' . $fromEmail . '>' . "\r\n"
@@ -129,10 +213,11 @@ function send_mail(string $to, string $subject, string $htmlBody, string $textBo
             . $htmlBody . "\r\n\r\n"
             . '--' . $boundary . '--';
 
-        // Dot-stuff lines beginning with a period.
         $data = preg_replace('/^\./m', '..', $headers . "\r\n" . $body);
         fwrite($conn, $data . "\r\n.\r\n");
-        if (!smtp_read($conn, '250')) return false;
+        if (!smtp_read($conn, '250')) {
+            return false;
+        }
 
         smtp_cmd($conn, 'QUIT', '221');
         return true;

@@ -42,8 +42,14 @@ return [
     ],
 
     'mail' => [
+        'enabled' => false,
         'from' => 'info@byclaudiadarlene.com',
         'from_name' => 'Hair by Claudia Darlene',
+        'smtp_host' => '',
+        'smtp_port' => '465',
+        'smtp_secure' => 'ssl', // ssl | tls | none
+        'smtp_user' => '',
+        'smtp_pass' => '',
     ],
 
     'admin_email' => 'admin@byclaudiadarlene.com',

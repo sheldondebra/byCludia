@@ -305,8 +305,11 @@ require __DIR__ . '/_layout_top.php';
               <?php if ($p['is_featured']): ?>
                 <span class="inline-block rounded-full px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800">Featured</span>
               <?php endif; ?>
+              <?php if (!empty($p['is_new'])): ?>
+                <span class="inline-block rounded-full px-2.5 py-1 text-xs font-medium bg-stone-900 text-white">New</span>
+              <?php endif; ?>
               <?php if ($p['on_sale']): ?>
-                <span class="inline-block rounded-full px-2.5 py-1 text-xs font-medium bg-[#F3C4C4]/50 text-stone-800">Sale</span>
+                <span class="inline-block rounded-full px-2.5 py-1 text-xs font-medium bg-red-600 text-white">Sale</span>
               <?php endif; ?>
             </div>
           </td>

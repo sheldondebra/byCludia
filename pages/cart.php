@@ -7,8 +7,8 @@ $robots = 'noindex, follow';
 $items = cart_items();
 $subtotal = cart_subtotal_gbp();
 $itemCount = (int) array_sum(array_map(static fn ($i) => (int) $i['quantity'], $items));
-$shippingNote = (float) (setting('shipping_flat', '15') ?: 15);
-$freeThreshold = (float) (setting('free_shipping_threshold', '') ?: 0);
+$shippingNote = shipping_default_rate();
+$freeThreshold = shipping_free_threshold();
 
 if (request_method() === 'POST') {
     if (!verify_csrf(post('csrf_token'))) {

@@ -183,12 +183,17 @@ require __DIR__ . '/_layout_top.php';
 
   <!-- Shipping -->
   <div class="bg-white rounded-2xl border border-stone-200 p-6 space-y-4">
-    <h2 class="font-medium flex items-center gap-2"><?= admin_icon('truck', 'w-4 h-4 text-stone-400') ?> Shipping</h2>
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <h2 class="font-medium flex items-center gap-2"><?= admin_icon('truck', 'w-4 h-4 text-stone-400') ?> Shipping</h2>
+        <p class="text-xs text-stone-500 mt-1">Default rate and country overrides are managed on the Shipping page.</p>
+      </div>
+      <a href="shipping.php" class="shrink-0 rounded-full border border-stone-300 px-4 py-2 text-xs hover:bg-stone-50">Manage shipping →</a>
+    </div>
     <div class="grid sm:grid-cols-2 gap-4">
       <div>
-        <label class="text-xs text-stone-500 mb-1 block">Standard flat rate (GBP)</label>
+        <label class="text-xs text-stone-500 mb-1 block">Default shipping rate (GBP)</label>
         <input name="shipping_flat" type="number" step="0.01" value="<?= e((string) setting('shipping_flat', '')) ?>" class="w-full rounded-xl border border-stone-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#F3C4C4]">
-        <p class="text-[11px] text-stone-400 mt-1">Fallback used if no carrier below is enabled.</p>
       </div>
       <div>
         <label class="text-xs text-stone-500 mb-1 block">Free shipping over (GBP)</label>
@@ -197,7 +202,7 @@ require __DIR__ . '/_layout_top.php';
     </div>
 
     <div class="border-t border-stone-100 pt-4 space-y-4">
-      <p class="text-xs text-stone-500">Carriers offered at checkout. Customers pick one; the choice is saved to the order for fulfilment &amp; tracking.</p>
+      <p class="text-xs text-stone-500">Optional carrier labels for fulfilment. Checkout pricing uses default + country overrides, not these rates.</p>
 
       <!-- DHL -->
       <div class="rounded-xl border border-stone-200 p-4">

@@ -256,12 +256,71 @@ body {
 }
 
 .lookbook-rail {
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
+  scroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .lookbook-shot {
   scroll-snap-align: start;
   box-shadow: 0 14px 40px rgba(28, 25, 23, 0.08);
+}
+
+.lookbook-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(251, 247, 242, 0.92);
+  color: #1c1917;
+  border: 1px solid rgba(28, 25, 23, 0.1);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.12);
+  transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.lookbook-nav:hover {
+  background: #f3c4c4;
+  color: #1c1917;
+}
+
+.lookbook-nav:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.lookbook-nav--prev {
+  left: 0.75rem;
+}
+
+.lookbook-nav--next {
+  right: 0.75rem;
+}
+
+@media (max-width: 639px) {
+  .lookbook-nav {
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+  .lookbook-nav--prev {
+    left: 0.35rem;
+  }
+
+  .lookbook-nav--next {
+    right: 0.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lookbook-rail {
+    scroll-behavior: auto;
+  }
 }
 
 .hair-collection .product-card .aspect-\[4\/5\] {

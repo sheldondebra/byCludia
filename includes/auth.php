@@ -83,6 +83,9 @@ function attempt_login(string $identifier, string $password, string $type = 'ema
         return false;
     }
     $_SESSION['user_id'] = (int) $user['id'];
+    if (function_exists('wishlist_merge_session_into_user')) {
+        wishlist_merge_session_into_user((int) $user['id']);
+    }
     return true;
 }
 
@@ -132,6 +135,10 @@ function register_user(string $name, string $password, ?string $email = null, ?s
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $ins = db()->prepare('INSERT INTO users (name, email, phone, password, role) VALUES (?, ?, ?, ?, ?)');
     $ins->execute([$name, $email, $phone, $hash, 'customer']);
-    $_SESSION['user_id'] = (int) db()->lastInsertId();
+    $newId = (int) db()->lastInsertId();
+    $_SESSION['user_id'] = $newId;
+    if (function_exists('wishlist_merge_session_into_user')) {
+        wishlist_merge_session_into_user($newId);
+    }
     return ['ok' => true];
 }

@@ -45,12 +45,7 @@ if (!empty($product['category_id'])) {
     $related = $relStmt->fetchAll();
 }
 
-$isWishlisted = false;
-if ($productUser = current_user()) {
-    $wlCheck = db()->prepare('SELECT 1 FROM wishlists WHERE user_id = ? AND product_id = ?');
-    $wlCheck->execute([(int) $productUser['id'], (int) $product['id']]);
-    $isWishlisted = (bool) $wlCheck->fetchColumn();
-}
+$isWishlisted = wishlist_has((int) $product['id']);
 
 $gallery = [];
 if (!empty($product['gallery'])) {

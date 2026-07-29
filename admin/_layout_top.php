@@ -37,10 +37,10 @@ $adminPage = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
   </style>
 </head>
 <body class="bg-[#FBF7F2] text-stone-900 min-h-screen">
-  <div class="flex min-h-screen">
-    <aside class="w-60 bg-stone-900 text-white p-6 hidden md:flex md:flex-col">
+  <div class="flex">
+    <aside class="fixed inset-y-0 left-0 z-40 w-60 bg-stone-900 text-white p-6 hidden md:flex md:flex-col">
       <p class="font-display text-2xl mb-8 flex items-center gap-2 shrink-0"><?= admin_icon('sparkles', 'w-5 h-5 text-[#F3C4C4]') ?> CD Admin</p>
-      <nav class="space-y-1 text-sm flex-1 overflow-y-auto">
+      <nav class="space-y-1 text-sm flex-1 overflow-y-auto overscroll-contain min-h-0">
         <a class="<?= admin_active_nav('index.php') ?>" href="index.php"><?= admin_icon('layout-dashboard') ?> Dashboard</a>
         <a class="<?= admin_active_nav('products.php') ?>" href="products.php"><?= admin_icon('package') ?> Products</a>
         <a class="<?= admin_active_nav('categories.php') ?>" href="categories.php"><?= admin_icon('folder-tree') ?> Categories</a>
@@ -49,6 +49,7 @@ $adminPage = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
         <a class="<?= admin_active_nav('email.php') ?>" href="email.php"><?= admin_icon('mail') ?> Email Marketing</a>
         <a class="<?= admin_active_nav('reviews.php') ?>" href="reviews.php"><?= admin_icon('star') ?> Reviews</a>
         <a class="<?= admin_active_nav('coupons.php') ?>" href="coupons.php"><?= admin_icon('ticket-percent') ?> Coupons</a>
+        <a class="<?= admin_active_nav('shipping.php') ?>" href="shipping.php"><?= admin_icon('truck') ?> Shipping</a>
         <a class="<?= admin_active_nav('gift-cards.php') ?>" href="gift-cards.php"><?= admin_icon('gift') ?> Gift cards</a>
         <a class="<?= admin_active_nav('subscribers.php') ?>" href="subscribers.php"><?= admin_icon('mail-plus') ?> Subscribers</a>
         <a class="<?= admin_active_nav('transactions.php') ?>" href="transactions.php"><?= admin_icon('credit-card') ?> Transactions</a>
@@ -71,7 +72,7 @@ $adminPage = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
       </div>
     </aside>
 
-    <div class="flex-1 flex flex-col min-w-0 min-h-screen">
+    <div class="flex-1 flex flex-col min-w-0 md:ml-60">
       <!-- Top header -->
       <header class="sticky top-0 z-30 bg-[#FBF7F2]/90 backdrop-blur border-b border-stone-200/80">
         <div class="px-4 sm:px-8 py-3.5 flex items-center gap-3 sm:gap-4">
@@ -125,4 +126,4 @@ $adminPage = basename($_SERVER['SCRIPT_NAME'] ?? 'index.php');
         </div>
       </header>
 
-      <main class="flex-1 p-6 sm:p-10">
+      <main class="p-6 sm:p-10">

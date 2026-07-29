@@ -1,7 +1,7 @@
 # Guest Wishlist — Design Spec
 
 **Date:** 2026-07-27  
-**Status:** Approved — awaiting implementation plan  
+**Status:** Approved — implemented  
 **Approach:** PHP session product-ID list (Approach 1)
 
 ## Goal

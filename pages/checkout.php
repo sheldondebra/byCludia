@@ -10,15 +10,6 @@ if (!$items) {
 }
 
 $subtotal = cart_subtotal_gbp();
-$shipMethods = shipping_methods();
-$freeThreshold = (float) (setting('free_shipping_threshold', '') ?: 0);
-$freeShip = $freeThreshold > 0 && $subtotal >= $freeThreshold;
-$selectedMethod = (string) (post('shipping_method') ?: array_key_first($shipMethods));
-if (!isset($shipMethods[$selectedMethod])) {
-    $selectedMethod = array_key_first($shipMethods);
-}
-$shipping = $freeShip ? 0.0 : (float) $shipMethods[$selectedMethod]['rate'];
-$shipCarrier = $shipMethods[$selectedMethod]['carrier'];
 $user = current_user();
 $error = null;
 
@@ -29,6 +20,7 @@ $form = [
     'shipping_city' => '',
     'shipping_postcode' => '',
     'shipping_country' => 'United Kingdom',
+    'shipping_country_code' => 'GB',
     'phone' => '',
     'coupon' => '',
     'gift_card' => '',
@@ -40,15 +32,28 @@ if ($user) {
     $form['phone'] = (string) ($user['phone'] ?? '');
 
     $lastOrderStmt = db()->prepare(
-        'SELECT email, phone, shipping_name, shipping_address, shipping_city, shipping_country, shipping_postcode
+        'SELECT email, phone, shipping_name, shipping_address, shipping_city, shipping_country, shipping_country_code, shipping_postcode
          FROM orders
          WHERE user_id = ?
             OR (email IS NOT NULL AND email != "" AND email = ?)
          ORDER BY id DESC
          LIMIT 1'
     );
-    $lastOrderStmt->execute([(int) $user['id'], (string) ($user['email'] ?? '')]);
-    $lastOrder = $lastOrderStmt->fetch() ?: null;
+    try {
+        $lastOrderStmt->execute([(int) $user['id'], (string) ($user['email'] ?? '')]);
+        $lastOrder = $lastOrderStmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        $lastOrderStmt = db()->prepare(
+            'SELECT email, phone, shipping_name, shipping_address, shipping_city, shipping_country, shipping_postcode
+             FROM orders
+             WHERE user_id = ?
+                OR (email IS NOT NULL AND email != "" AND email = ?)
+             ORDER BY id DESC
+             LIMIT 1'
+        );
+        $lastOrderStmt->execute([(int) $user['id'], (string) ($user['email'] ?? '')]);
+        $lastOrder = $lastOrderStmt->fetch() ?: null;
+    }
 
     if ($lastOrder) {
         foreach (
@@ -67,8 +72,29 @@ if ($user) {
                 $form[$key] = $value;
             }
         }
+        $codeFromOrder = shipping_normalize_country_code((string) ($lastOrder['shipping_country_code'] ?? ''));
+        if ($codeFromOrder === null) {
+            $codeFromOrder = shipping_normalize_country_code(geo_country_code((string) ($lastOrder['shipping_country'] ?? '')));
+        }
+        $form['shipping_country_code'] = $codeFromOrder ?? 'OTHER';
+        if ($codeFromOrder) {
+            $form['shipping_country'] = geo_country_name($codeFromOrder);
+        } elseif (strcasecmp((string) ($lastOrder['shipping_country'] ?? ''), 'Other') === 0) {
+            $form['shipping_country'] = 'Other';
+            $form['shipping_country_code'] = 'OTHER';
+        }
     }
 }
+
+$selectedCountryCode = shipping_normalize_country_code((string) (post('shipping_country_code') ?: $form['shipping_country_code']));
+if (request_method() !== 'POST' && strtoupper((string) $form['shipping_country_code']) === 'OTHER') {
+    $selectedCountryCode = null;
+}
+$shipQuote = shipping_rate_for_country($selectedCountryCode, $subtotal);
+$shipping = (float) $shipQuote['rate'];
+$shipCarrier = 'standard';
+$freeThreshold = shipping_free_threshold();
+$freeShip = $shipQuote['source'] === 'free';
 
 if (request_method() === 'POST') {
     if (!verify_csrf(post('csrf_token'))) {
@@ -78,11 +104,17 @@ if (request_method() === 'POST') {
         $name = trim((string) post('shipping_name'));
         $address = trim((string) post('shipping_address'));
         $city = trim((string) post('shipping_city'));
-        $country = trim((string) post('shipping_country'));
+        $postedCode = strtoupper(trim((string) post('shipping_country_code')));
+        $countryCode = shipping_normalize_country_code($postedCode);
+        $country = $countryCode ? geo_country_name($countryCode) : 'Other';
         $postcode = trim((string) post('shipping_postcode'));
         $phone = trim((string) post('phone', ''));
         $method = (string) post('payment_method', 'stripe');
         $couponCode = strtoupper(trim((string) post('coupon', '')));
+
+        $shipQuote = shipping_rate_for_country($countryCode, $subtotal);
+        $shipping = (float) $shipQuote['rate'];
+        $freeShip = $shipQuote['source'] === 'free';
 
         $form = [
             'email' => $email,
@@ -90,7 +122,8 @@ if (request_method() === 'POST') {
             'shipping_address' => $address,
             'shipping_city' => $city,
             'shipping_postcode' => $postcode,
-            'shipping_country' => $country !== '' ? $country : 'United Kingdom',
+            'shipping_country' => $country,
+            'shipping_country_code' => $countryCode ?? 'OTHER',
             'phone' => $phone,
             'coupon' => (string) post('coupon', ''),
             'gift_card' => (string) post('gift_card', ''),
@@ -98,6 +131,8 @@ if (request_method() === 'POST') {
 
         if (!filter_var($email, FILTER_VALIDATE_EMAIL) || $name === '' || $address === '' || $city === '') {
             $error = 'Please complete all required fields.';
+        } elseif ($postedCode === '') {
+            $error = 'Please select a country.';
         } else {
             $discount = 0.0;
             if ($couponCode !== '') {
@@ -146,8 +181,8 @@ if (request_method() === 'POST') {
             $pdo->beginTransaction();
             try {
                 $ins = $pdo->prepare(
-                    'INSERT INTO orders (order_number, user_id, email, phone, status, currency, exchange_rate, subtotal, shipping, discount, total, payment_method, shipping_name, shipping_address, shipping_city, shipping_country, shipping_postcode, shipping_carrier)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                    'INSERT INTO orders (order_number, user_id, email, phone, status, currency, exchange_rate, subtotal, shipping, discount, total, payment_method, shipping_name, shipping_address, shipping_city, shipping_country, shipping_country_code, shipping_postcode, shipping_carrier)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
                 );
                 $ins->execute([
                     $orderNo,
@@ -166,6 +201,7 @@ if (request_method() === 'POST') {
                     $address,
                     $city,
                     $country,
+                    $countryCode,
                     $postcode,
                     $shipCarrier,
                 ]);
@@ -326,27 +362,24 @@ require ROOT_PATH . '/includes/header.php';
             <input id="shipping_postcode" name="shipping_postcode" autocomplete="postal-code" value="<?= e($form['shipping_postcode']) ?>" class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm">
           </div>
           <div>
-            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="shipping_country">Country</label>
-            <div class="place-combobox mt-1" data-place-combobox="country">
-              <input
-                id="shipping_country"
-                name="shipping_country"
-                autocomplete="country-name"
-                placeholder="Search country"
-                value="<?= e($form['shipping_country']) ?>"
-                class="auth-input place-combobox__input"
-                role="combobox"
-                aria-autocomplete="list"
-                aria-controls="country-suggest-list"
-                aria-expanded="false"
-                <?= ($form['shipping_country'] === 'United Kingdom' || $form['shipping_country'] === '') ? ' data-autofill="1"' : '' ?>
-              >
-              <button type="button" class="place-combobox__chevron" data-place-toggle aria-label="Browse countries">
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 9l-7 7-7-7"/></svg>
-              </button>
-              <ul id="country-suggest-list" class="address-suggest" role="listbox" hidden></ul>
-            </div>
-            <p class="mt-1.5 text-[11px] text-brand-soft">Search or pick from the full country list</p>
+            <label class="text-xs tracking-[0.14em] uppercase text-brand-soft" for="shipping_country_code">Country</label>
+            <select
+              id="shipping_country_code"
+              name="shipping_country_code"
+              required
+              autocomplete="country"
+              class="mt-1 w-full rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm bg-white"
+              data-shipping-country
+            >
+              <?php
+              $selectedCode = strtoupper((string) ($form['shipping_country_code'] ?? 'GB'));
+              foreach (geo_countries() as $c):
+              ?>
+                <option value="<?= e($c['code']) ?>" <?= $selectedCode === $c['code'] ? 'selected' : '' ?>><?= e($c['name']) ?></option>
+              <?php endforeach; ?>
+              <option value="OTHER" <?= $selectedCode === 'OTHER' ? 'selected' : '' ?>>Other</option>
+            </select>
+            <p class="mt-1.5 text-[11px] text-brand-soft">Shipping updates automatically for your country</p>
           </div>
           <div>
             <label class="text-xs tracking-[0.14em] uppercase text-brand-soft">Phone</label>
@@ -396,26 +429,21 @@ require ROOT_PATH . '/includes/header.php';
           </div>
         </div>
 
-        <h2 class="font-display text-2xl pt-4">Shipping method</h2>
+        <h2 class="font-display text-2xl pt-4">Shipping</h2>
         <?php if ($freeShip): ?>
           <p class="text-sm text-emerald-600 font-medium">You've qualified for free shipping.</p>
+        <?php else: ?>
+          <p class="text-sm text-brand-soft">
+            <?php if ($shipQuote['source'] === 'override'): ?>
+              Rate for <?= e(geo_country_name($shipQuote['country_code'])) ?>.
+            <?php else: ?>
+              Standard rate for your destination.
+            <?php endif; ?>
+          </p>
         <?php endif; ?>
-        <div class="grid gap-3">
-          <?php foreach ($shipMethods as $mid => $m): ?>
-            <?php $cost = $freeShip ? 0.0 : (float) $m['rate']; ?>
-            <label class="cursor-pointer">
-              <input type="radio" name="shipping_method" value="<?= e($mid) ?>" class="peer sr-only ship-radio"
-                     data-cost="<?= e((string) convert_price($cost)) ?>" <?= $mid === $selectedMethod ? 'checked' : '' ?>>
-              <span class="flex items-center justify-between rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm peer-checked:border-brand-ink peer-checked:bg-brand-ink/5 transition">
-                <span class="flex items-center gap-2">
-                  <?php if ($m['carrier'] === 'dhl'): ?><span class="inline-block px-2 py-0.5 rounded bg-[#ffcc00] text-[#d40511] text-[11px] font-bold">DHL</span>
-                  <?php elseif ($m['carrier'] === 'fedex'): ?><span class="inline-block px-2 py-0.5 rounded bg-[#4d148c] text-white text-[11px] font-bold">FedEx</span><?php endif; ?>
-                  <?= e($m['label']) ?>
-                </span>
-                <span class="font-medium"><?= $cost <= 0 ? '<span class="text-emerald-600">Free</span>' : money($cost) ?></span>
-              </span>
-            </label>
-          <?php endforeach; ?>
+        <div class="rounded-2xl border border-brand-ink/10 px-4 py-3 text-sm flex items-center justify-between bg-brand-ink/[0.02]">
+          <span>Shipping</span>
+          <span class="font-medium" data-ship-method-cost><?= $shipping <= 0 ? '<span class="text-emerald-600">Free</span>' : money($shipping) ?></span>
         </div>
 
         <h2 class="font-display text-2xl pt-4">Payment method</h2>
@@ -462,21 +490,42 @@ require ROOT_PATH . '/includes/header.php';
 
 <script>
 (() => {
-  const radios = document.querySelectorAll('.ship-radio');
-  if (radios.length) {
-    const subtotal = <?= json_encode(convert_price($subtotal)) ?>;
-    const symbol = <?= json_encode(currency_symbol()) ?>;
-    const fmt = (n) => symbol + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const shipLine = document.querySelector('[data-ship-line]');
-    const totals = document.querySelectorAll('[data-summary-total], [data-order-total]');
-    const update = (r) => {
-      const cost = parseFloat(r.dataset.cost) || 0;
-      if (shipLine) shipLine.innerHTML = cost <= 0 ? '<span class="text-emerald-600 font-medium">Free</span>' : fmt(cost);
-      totals.forEach((t) => t.textContent = fmt(subtotal + cost));
-    };
-    radios.forEach((r) => r.addEventListener('change', () => update(r)));
-    const checked = document.querySelector('.ship-radio:checked');
-    if (checked) update(checked);
+  const shipConfig = {
+    subtotal: <?= json_encode(convert_price($subtotal)) ?>,
+    defaultRate: <?= json_encode(convert_price(shipping_default_rate())) ?>,
+    freeThreshold: <?= json_encode($freeThreshold > 0 ? convert_price($freeThreshold) : 0) ?>,
+    overrides: <?= json_encode(array_map('convert_price', shipping_active_override_map()), JSON_FORCE_OBJECT) ?>,
+    symbol: <?= json_encode(currency_symbol()) ?>,
+  };
+  const fmt = (n) => shipConfig.symbol + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const shipLine = document.querySelector('[data-ship-line]');
+  const shipMethodCost = document.querySelector('[data-ship-method-cost]');
+  const totals = document.querySelectorAll('[data-summary-total], [data-order-total]');
+  const countrySelect = document.querySelector('[data-shipping-country]');
+
+  const resolveShipCost = (code) => {
+    if (shipConfig.freeThreshold > 0 && shipConfig.subtotal >= shipConfig.freeThreshold) {
+      return 0;
+    }
+    const key = String(code || '').toUpperCase();
+    if (key && key !== 'OTHER' && Object.prototype.hasOwnProperty.call(shipConfig.overrides, key)) {
+      return Number(shipConfig.overrides[key]) || 0;
+    }
+    return Number(shipConfig.defaultRate) || 0;
+  };
+
+  const updateShipping = () => {
+    const code = countrySelect ? countrySelect.value : 'GB';
+    const cost = resolveShipCost(code);
+    const html = cost <= 0 ? '<span class="text-emerald-600 font-medium">Free</span>' : fmt(cost);
+    if (shipLine) shipLine.innerHTML = html;
+    if (shipMethodCost) shipMethodCost.innerHTML = cost <= 0 ? '<span class="text-emerald-600">Free</span>' : fmt(cost);
+    totals.forEach((t) => { t.textContent = fmt(shipConfig.subtotal + cost); });
+  };
+
+  if (countrySelect) {
+    countrySelect.addEventListener('change', updateShipping);
+    updateShipping();
   }
 
   // Live coupon / gift card validation
@@ -686,31 +735,26 @@ require ROOT_PATH . '/includes/header.php';
     return { hide, load, input };
   };
 
-  const countryRoot = document.querySelector('[data-place-combobox="country"]');
-  const countryInput = document.getElementById('shipping_country');
-  const countryList = document.getElementById('country-suggest-list');
-  createCombobox({
-    root: countryRoot,
-    input: countryInput,
-    list: countryList,
-    getItems: (q) => {
-      const query = q.trim().toLowerCase();
-      const priority = ['GB', 'GH', 'US', 'NG', 'CA', 'IE', 'FR', 'DE', 'NL', 'AU', 'AE', 'ZA'];
-      let list = countries.filter((c) => !query || c.name.toLowerCase().includes(query) || c.code.toLowerCase().includes(query));
-      if (!query) {
-        const preferred = priority
-          .map((code) => countries.find((c) => c.code === code))
-          .filter(Boolean);
-        const rest = list.filter((c) => !priority.includes(c.code));
-        list = preferred.concat(rest);
-      }
-      return list.slice(0, 12).map((c) => ({ label: c.name, name: c.name, code: c.code }));
-    },
-    onSelect: (item) => {
-      countryInput.value = item.name;
-      markManual(countryInput);
-    },
-  });
+  const countrySelectEl = document.getElementById('shipping_country_code');
+  const countryName = () => {
+    if (!countrySelectEl) return '';
+    const opt = countrySelectEl.options[countrySelectEl.selectedIndex];
+    if (!opt || opt.value === 'OTHER') return '';
+    return (opt.textContent || '').trim();
+  };
+  const setCountryByNameOrCode = (value) => {
+    if (!countrySelectEl || !value) return;
+    const raw = String(value).trim();
+    const upper = raw.toUpperCase();
+    let match = Array.from(countrySelectEl.options).find((o) => o.value === upper);
+    if (!match) {
+      match = Array.from(countrySelectEl.options).find((o) => (o.textContent || '').trim().toLowerCase() === raw.toLowerCase());
+    }
+    if (match) {
+      countrySelectEl.value = match.value;
+      countrySelectEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  };
 
   const cityRoot = document.querySelector('[data-place-combobox="city"]');
   const cityInput = document.getElementById('shipping_city');
@@ -721,7 +765,7 @@ require ROOT_PATH . '/includes/header.php';
     list: cityList,
     remote: true,
     getItems: async (q, signal) => {
-      const country = (countryInput && countryInput.value || '').trim();
+      const country = countryName();
       const url = `${base}/api/city-suggest.php?q=${encodeURIComponent(q)}&country=${encodeURIComponent(country)}`;
       const res = await fetch(url, { credentials: 'same-origin', signal });
       const data = await res.json();
@@ -730,10 +774,7 @@ require ROOT_PATH . '/includes/header.php';
     onSelect: (item) => {
       cityInput.value = item.city || item.label || '';
       markManual(cityInput);
-      if (item.country && countryInput && canAutofill(countryInput)) {
-        countryInput.value = item.country;
-        countryInput.dataset.autofill = '1';
-      }
+      if (item.country) setCountryByNameOrCode(item.country);
     },
   });
 
@@ -741,7 +782,7 @@ require ROOT_PATH . '/includes/header.php';
   const address = document.getElementById('shipping_address');
   const city = document.getElementById('shipping_city');
   const postcode = document.getElementById('shipping_postcode');
-  const country = document.getElementById('shipping_country');
+  const country = countrySelectEl;
   const list = document.getElementById('address-suggest-list');
   if (!wrap || !address || !list) return;
 
@@ -750,7 +791,7 @@ require ROOT_PATH . '/includes/header.php';
   let items = [];
   let abort = null;
 
-  [city, postcode, country].forEach((el) => {
+  [city, postcode].forEach((el) => {
     if (!el) return;
     el.addEventListener('input', () => markManual(el));
   });
@@ -774,10 +815,7 @@ require ROOT_PATH . '/includes/header.php';
       postcode.value = item.postcode;
       postcode.dataset.autofill = '1';
     }
-    if (canAutofill(country) && item.country) {
-      country.value = item.country;
-      country.dataset.autofill = '1';
-    }
+    if (item.country) setCountryByNameOrCode(item.country);
     hide();
     address.focus();
   };

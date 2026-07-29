@@ -33,6 +33,8 @@ function db(): PDO
             ensure_email_marketing_schema($pdo, 'mysql');
             ensure_blog_schema($pdo, 'mysql');
             ensure_seo_schema($pdo, 'mysql');
+            ensure_product_badge_schema($pdo, 'mysql');
+            ensure_shipping_schema($pdo, 'mysql');
             seed_blog_posts($pdo);
             return $pdo;
         } catch (Throwable $e) {
@@ -57,6 +59,8 @@ function db(): PDO
     ensure_email_marketing_schema($pdo, 'sqlite');
     ensure_blog_schema($pdo, 'sqlite');
     ensure_seo_schema($pdo, 'sqlite');
+    ensure_product_badge_schema($pdo, 'sqlite');
+    ensure_shipping_schema($pdo, 'sqlite');
     seed_blog_posts($pdo);
 
     return $pdo;
@@ -130,6 +134,88 @@ function ensure_users_auth_schema(PDO $pdo, string $driver): void
     }
 }
 
+/** Add product badge flags (is_new). */
+function ensure_product_badge_schema(PDO $pdo, string $driver): void
+{
+    try {
+        if ($driver === 'mysql') {
+            $cols = $pdo->query("SHOW COLUMNS FROM products LIKE 'is_new'")->fetchAll();
+            if (!$cols) {
+                $pdo->exec('ALTER TABLE products ADD COLUMN is_new TINYINT(1) NOT NULL DEFAULT 0 AFTER on_sale');
+            }
+            return;
+        }
+
+        $cols = $pdo->query('PRAGMA table_info(products)')->fetchAll();
+        $has = false;
+        foreach ($cols as $col) {
+            if (($col['name'] ?? '') === 'is_new') {
+                $has = true;
+                break;
+            }
+        }
+        if (!$has) {
+            $pdo->exec('ALTER TABLE products ADD COLUMN is_new INTEGER NOT NULL DEFAULT 0');
+        }
+    } catch (Throwable $e) {
+        // Non-fatal
+    }
+}
+
+/** Country shipping overrides + optional order country code. */
+function ensure_shipping_schema(PDO $pdo, string $driver): void
+{
+    try {
+        if ($driver === 'mysql') {
+            $pdo->exec(
+                "CREATE TABLE IF NOT EXISTS shipping_country_rates (
+                    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                    country_code CHAR(2) NOT NULL,
+                    rate DECIMAL(10,2) NOT NULL DEFAULT 0,
+                    is_active TINYINT(1) NOT NULL DEFAULT 1,
+                    label VARCHAR(190) NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY shipping_country_rates_code_unique (country_code),
+                    KEY shipping_country_rates_active_idx (country_code, is_active)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+            $cols = $pdo->query("SHOW COLUMNS FROM orders LIKE 'shipping_country_code'")->fetchAll();
+            if (!$cols) {
+                $pdo->exec('ALTER TABLE orders ADD COLUMN shipping_country_code CHAR(2) NULL AFTER shipping_country');
+            }
+            return;
+        }
+
+        $pdo->exec(
+            "CREATE TABLE IF NOT EXISTS shipping_country_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                country_code TEXT NOT NULL UNIQUE,
+                rate REAL NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                label TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )"
+        );
+        $pdo->exec('CREATE INDEX IF NOT EXISTS shipping_country_rates_active_idx ON shipping_country_rates (country_code, is_active)');
+
+        $cols = $pdo->query('PRAGMA table_info(orders)')->fetchAll();
+        $has = false;
+        foreach ($cols as $col) {
+            if (($col['name'] ?? '') === 'shipping_country_code') {
+                $has = true;
+                break;
+            }
+        }
+        if (!$has) {
+            $pdo->exec('ALTER TABLE orders ADD COLUMN shipping_country_code TEXT');
+        }
+    } catch (Throwable $e) {
+        // Non-fatal
+    }
+}
+
 /** Add unique share token column for public wishlist links. */
 function ensure_wishlist_share_schema(PDO $pdo, string $driver): void
 {
@@ -200,6 +286,7 @@ function init_sqlite_schema(PDO $pdo): void
       is_featured INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1,
       on_sale INTEGER NOT NULL DEFAULT 0,
+      is_new INTEGER NOT NULL DEFAULT 0,
       rating REAL NOT NULL DEFAULT 5,
       review_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP

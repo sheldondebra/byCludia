@@ -57,6 +57,7 @@ if (request_method() === 'POST' && verify_csrf(post('csrf_token'))) {
     $reviewCount = (int) post('review_count', 0);
     $featured = post('is_featured') ? 1 : 0;
     $onSale = post('on_sale') ? 1 : 0;
+    $isNew = post('is_new') ? 1 : 0;
     $active = post('is_active') ? 1 : 0;
     $seoTitle = mb_substr(trim((string) post('seo_title')), 0, 70);
     $seoDescription = mb_substr(trim((string) post('seo_description')), 0, 320);
@@ -165,15 +166,15 @@ if (request_method() === 'POST' && verify_csrf(post('csrf_token'))) {
     } else {
         if ($id > 0) {
             db()->prepare(
-                'UPDATE products SET category_id=?, name=?, slug=?, short_description=?, description=?, base_price=?, compare_at_price=?, rating=?, review_count=?, image=?, gallery=?, video=?, is_featured=?, on_sale=?, is_active=?, seo_title=?, seo_description=?, focus_keyword=?, image_alt=?, faq_json=? WHERE id=?'
-            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $active, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $imageAlt ?: null, $faqJson, $id]);
+                'UPDATE products SET category_id=?, name=?, slug=?, short_description=?, description=?, base_price=?, compare_at_price=?, rating=?, review_count=?, image=?, gallery=?, video=?, is_featured=?, on_sale=?, is_new=?, is_active=?, seo_title=?, seo_description=?, focus_keyword=?, image_alt=?, faq_json=? WHERE id=?'
+            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $isNew, $active, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $imageAlt ?: null, $faqJson, $id]);
         } else {
             if ($image === '') {
                 $image = 'assets/images/products/p1.svg';
             }
             db()->prepare(
-                'INSERT INTO products (category_id, name, slug, short_description, description, base_price, compare_at_price, rating, review_count, image, gallery, video, is_featured, on_sale, is_active, seo_title, seo_description, focus_keyword, image_alt, faq_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $active, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $imageAlt ?: null, $faqJson]);
+                'INSERT INTO products (category_id, name, slug, short_description, description, base_price, compare_at_price, rating, review_count, image, gallery, video, is_featured, on_sale, is_new, is_active, seo_title, seo_description, focus_keyword, image_alt, faq_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$categoryId, $name, $slug, $short, $desc, $price, $compareAt, $rating, $reviewCount, $image, $galleryJson, $video, $featured, $onSale, $isNew, $active, $seoTitle ?: null, $seoDescription ?: null, $focusKeyword ?: null, $imageAlt ?: null, $faqJson]);
             $id = (int) db()->lastInsertId();
         }
 
@@ -494,7 +495,8 @@ require __DIR__ . '/_layout_top.php';
       <h2 class="font-medium flex items-center gap-2"><?= admin_icon('settings', 'w-4 h-4 text-stone-400') ?> Status</h2>
       <label class="flex items-center justify-between text-sm"><span>Active</span><input type="checkbox" name="is_active" value="1" <?= !isset($product) || !empty($product['is_active']) ? 'checked' : '' ?> class="accent-emerald-500 w-4 h-4"></label>
       <label class="flex items-center justify-between text-sm"><span>Featured</span><input type="checkbox" name="is_featured" value="1" <?= !empty($product['is_featured']) ? 'checked' : '' ?> class="accent-amber-500 w-4 h-4"></label>
-      <label class="flex items-center justify-between text-sm"><span>On sale</span><input type="checkbox" name="on_sale" value="1" <?= !empty($product['on_sale']) ? 'checked' : '' ?> class="accent-[#E8A8A8] w-4 h-4"></label>
+      <label class="flex items-center justify-between text-sm"><span>New</span><input type="checkbox" name="is_new" value="1" <?= !empty($product['is_new']) ? 'checked' : '' ?> class="accent-stone-800 w-4 h-4"></label>
+      <label class="flex items-center justify-between text-sm"><span>On sale</span><input type="checkbox" name="on_sale" value="1" <?= !empty($product['on_sale']) ? 'checked' : '' ?> class="accent-red-600 w-4 h-4"></label>
     </div>
 
     <div class="bg-white rounded-2xl border border-stone-200 p-6 space-y-4">
